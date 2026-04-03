@@ -272,7 +272,7 @@
 
 .App {
   min-height: 100vh;
-  background: #f5f5f5;
+  background: var(--bg-primary);
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -286,7 +286,7 @@
 }
 
 .container {
-  background: #f5f5f5;
+  background: var(--bg-primary);
   border-radius: 0;
   box-shadow: none;
   padding: 0;
@@ -617,7 +617,7 @@
 .month-selector {
   margin-bottom: 0;
   padding: 14px;
-  background: #ffffff;
+  background: var(--bg-secondary);
   border-radius: 0;
   border: none;
   transition: background-color 0.3s ease, box-shadow 0.3s ease;
@@ -626,7 +626,7 @@
 
 @media (max-width: 480px) {
   .month-selector {
-    margin-bottom: 0; background: #ffffff; border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    margin-bottom: 0; background: var(--bg-secondary); border-bottom: 1px solid rgba(0, 0, 0, 0.05);
     padding: 12px;
     border-radius: 0;
   }
@@ -670,7 +670,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: #ffffff;
+  background: var(--bg-secondary);
   padding: 16px 16px;
   border-radius: 0;
   margin-bottom: 0;
@@ -789,7 +789,7 @@
 @media (max-width: 480px) {
   .dashboard-summary {
     padding: 20px 16px;
-    margin-top: 20px;
+    margin: 12px;
     border-radius: 8px;
   }
 }
@@ -907,12 +907,12 @@
   color: var(--accent-secondary);
 }
 
-.expense-card {
+.income-card{
   text-align: center;
 }
 
-.expense-card .card-title {
-  font-size: 0.95rem;
+.expense-card {
+  text-align: center;
 }
 
 .expense-card .card-amount {
@@ -926,10 +926,6 @@
 
 .balance-card {
   text-align: center;
-}
-
-.balance-card .card-title {
-  font-size: 0.95rem;
 }
 
 .balance-card.balance-positive .card-amount {
@@ -1090,7 +1086,7 @@
   gap: 12px;
   margin-bottom: 0;
   padding: 20px 16px;
-  background: #ffffff;
+  background: var(--bg-secondary);
   border: none;
   border-radius: 0;
   transition: all 0.3s ease;
@@ -1314,6 +1310,7 @@
   align-items: center;
   margin-bottom: 16px;
   margin-top: 24px;
+  padding: 0 12px;
 }
 
 .toggle-btn {
@@ -1352,7 +1349,7 @@
   gap: 16px;
   margin-bottom: 0;
   padding: 20px 16px;
-  background: #ffffff;
+  background: var(--bg-secondary);
   border: none;
   border-radius: 0;
   transition: all 0.3s ease;
@@ -1381,7 +1378,7 @@
   gap: 16px;
   margin-bottom: 0;
   padding: 20px 16px;
-  background: #ffffff;
+  background: var(--bg-secondary);
   border: none;
   border-radius: 0;
   transition: all 0.3s ease;
@@ -1400,7 +1397,7 @@
   gap: 12px;
   margin-bottom: 0;
   padding: 16px 16px;
-  background: #ffffff;
+  background: var(--bg-secondary);
   border-radius: 0;
   border-left: none;
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
@@ -1523,7 +1520,7 @@
   .income-section {
     padding: 12px;
     gap: 12px;
-    margin-bottom: 20px;
+    margin: 10px 12px;
     border-radius: 8px;
   }
 }
@@ -1710,7 +1707,7 @@
   gap: 0;
   margin-top: 0;
   padding: 12px 16px;
-  background: #ffffff;
+  background: var(--bg-secondary);
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
@@ -1719,7 +1716,7 @@
     gap: 0;
     margin-top: 0;
     padding: 12px 12px;
-    background: #ffffff;
+    background: var(--bg-secondary);
   }
 }
 
@@ -1886,9 +1883,8 @@
   color: var(--accent-primary);
   white-space: nowrap;
   min-width: 90px;
-  text-align: right;
   transition: color 0.3s ease;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.2px;  
 }
 
 .delete-btn {
@@ -2082,7 +2078,7 @@
   border-top: none;
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   transition: border-color 0.3s ease;
-  background: #ffffff;
+  background: var(--bg-secondary);
 }
 
 @media (max-width: 480px) {
@@ -2090,7 +2086,7 @@
     margin-top: 0;
     padding: 16px 12px;
     border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-    background: #ffffff;
+    background: var(--bg-secondary);
   }
 }
 
@@ -2184,7 +2180,7 @@
   border-top: none;
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   transition: border-color 0.3s ease;
-  background: #ffffff;
+  background: var(--bg-secondary);
 }
 
 @media (max-width: 480px) {
@@ -2192,7 +2188,7 @@
     margin-top: 0;
     padding: 16px 12px;
     border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-    background: #ffffff;
+    background: var(--bg-secondary);
   }
 }
 
@@ -2272,7 +2268,7 @@
 
 @media (max-width: 480px) {
   .insights-section {
-    margin-top: 24px;
+    margin: 12px;
   }
 }
 
@@ -2467,14 +2463,6 @@
     font-size: 0.9rem;
   }
 
-  .expense-card .card-title {
-    font-size: 0.54rem;
-  }
-
-  .balance-card .card-title {
-    font-size: 0.54rem;
-  }
-
   .insights-grid {
     grid-template-columns: 1fr;
   }
@@ -2570,6 +2558,7 @@
   .financial-cards {
     grid-template-columns: 1fr;
     gap: 12px;
+    padding: 0 12px;
   }
 
   .financial-card {
@@ -2582,7 +2571,7 @@
   }
 
   .expense-card .card-amount {
-    font-size: 0.96rem;
+    font-size: 1.6rem;
   }
 
   .balance-card .card-amount {
@@ -2591,14 +2580,6 @@
 
   .card-title {
     font-size: 0.85rem;
-  }
-
-  .expense-card .card-title {
-    font-size: 0.51rem;
-  }
-
-  .balance-card .card-title {
-    font-size: 0.51rem;
   }
 
   .card-subtitle {
