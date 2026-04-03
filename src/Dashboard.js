@@ -242,15 +242,20 @@ function Dashboard({
           {error && <div className="form-error">{error}</div>}
           
           <div className="form-group">
-            <label htmlFor="amount">Amount</label>
+            <label htmlFor="amount">Amount (₹)</label>
             <input
               id="amount"
               type="number"
-              placeholder="Enter amount"
+              inputMode="decimal"
+              placeholder="0.00"
               value={amount}
               onChange={(e) => {
-                setAmount(e.target.value);
-                if (error) setError('');
+                const val = e.target.value;
+                // Allow empty string for clearing the field, and valid positive decimals
+                if (val === '' || /^\d*\.?\d{0,2}$/.test(val)) {
+                  setAmount(val);
+                  if (error) setError('');
+                }
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -258,6 +263,8 @@ function Dashboard({
                   onAddExpense({ preventDefault: () => {} });
                 }
               }}
+              min="0"
+              max="9999999.99"
               step="0.01"
               autoFocus
               className={error && (!amount || parseFloat(amount) <= 0) ? 'input-error' : ''}
@@ -427,16 +434,23 @@ function Dashboard({
             {error && <div className="form-error">{error}</div>}
             
             <div className="form-group">
-              <label htmlFor="income-amount">Amount</label>
+              <label htmlFor="income-amount">Amount (₹)</label>
               <input
                 id="income-amount"
                 type="number"
-                placeholder="Enter income amount"
+                inputMode="decimal"
+                placeholder="0.00"
                 value={incomeAmount}
                 onChange={(e) => {
-                  setIncomeAmount(e.target.value);
-                  if (error) setError('');
+                  const val = e.target.value;
+                  // Allow empty string for clearing the field, and valid positive decimals
+                  if (val === '' || /^\d*\.?\d{0,2}$/.test(val)) {
+                    setIncomeAmount(val);
+                    if (error) setError('');
+                  }
                 }}
+                min="0"
+                max="9999999.99"
                 step="0.01"
                 className={error && (!incomeAmount || parseFloat(incomeAmount) <= 0) ? 'input-error' : ''}
               />
