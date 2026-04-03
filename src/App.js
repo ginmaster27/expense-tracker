@@ -70,13 +70,13 @@ function App() {
       return 'Invalid date';
     }
     
-    const parts = isoDate.split('-');
-    if (parts.length !== 3) {
+    const [year, month] = isoDate.split('-');
+    if (!year || !month) {
       return 'Invalid date';
     }
     
-    const [year, month, day] = parts;
-    if (!year || !month || !day) {
+    const day = isoDate.split('-')[2];
+    if (!day) {
       return 'Invalid date';
     }
     
@@ -532,7 +532,7 @@ function App() {
   const getFilteredExpenses = () => {
     const filtered = expenses.filter((expense) => {
       // Parse ISO date format (YYYY-MM-DD)
-      const [year, month, day] = expense.date.split('-').map(Number);
+      const [year, month] = expense.date.split('-').map(Number);
       
       // Check month filter
       const monthMatch = selectedMonth === 'all' || month === parseInt(selectedMonth);
@@ -567,7 +567,7 @@ function App() {
   const getFilteredIncome = () => {
     return income.filter((inc) => {
       // Parse ISO date format (YYYY-MM-DD)
-      const [year, month, day] = inc.date.split('-').map(Number);
+      const [year, month] = inc.date.split('-').map(Number);
       
       // Check month filter
       const monthMatch = selectedMonth === 'all' || month === parseInt(selectedMonth);
@@ -628,7 +628,6 @@ function App() {
     // Group filtered expenses into weeks
     filteredExpenses.forEach((expense) => {
       const [expYear, expMonth, expDay] = expense.date.split('-').map(Number);
-
       // Only include expenses from the selected month/year
       if (expYear === year && expMonth === month + 1) {
         const dayOfMonth = parseInt(expDay);
@@ -664,7 +663,7 @@ function App() {
       // Calculate total expenses for this month
       let monthTotal = 0;
       expenses.forEach((expense) => {
-        const [expYear, expMonth, expDay] = expense.date.split('-').map(Number);
+        const [expYear, expMonth] = expense.date.split('-').map(Number);
         if (expYear === year && expMonth === month) {
           monthTotal += expense.amount;
         }
@@ -743,21 +742,7 @@ function App() {
     };
   };
 
-  const getFilteredCategoryBreakdown = () => {
-    const breakdown = {};
-    
-    filteredExpenses.forEach((expense) => {
-      if (breakdown[expense.category]) {
-        breakdown[expense.category] += expense.amount;
-      } else {
-        breakdown[expense.category] = expense.amount;
-      }
-    });
 
-    return Object.entries(breakdown)
-      .map(([category, total]) => ({ category, total }))
-      .sort((a, b) => b.total - a.total);
-  };
 
   const getCategoryBreakdown = () => {
     const breakdown = {};
