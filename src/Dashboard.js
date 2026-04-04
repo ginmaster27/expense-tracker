@@ -735,30 +735,6 @@ function Dashboard({
           </div>
         )}
 
-        {/* Chart Filter */}
-        {expenses.length > 0 && (
-          <div className="chart-filter-section">
-            <div className="filter-controls">
-              <label htmlFor="chart-filter" className="filter-label">Filter Charts:</label>
-              <select
-                id="chart-filter"
-                className="chart-filter-select"
-                value={chartFilter}
-                onChange={(e) => setChartFilter(e.target.value)}
-              >
-                <option value="current">Current Month</option>
-                <option value="previous">Previous Month</option>
-                <option value="3months">Last 3 Months</option>
-                <option value="6months">Last 6 Months</option>
-              </select>
-            </div>
-            <div className="filter-status">
-              <span className="status-label">Viewing:</span>
-              <span className="status-value">{getFilterLabel()}</span>
-            </div>
-          </div>
-        )}
-
         {(expenses.length > 0 || expensesLoading) && (getMonthlyTrendData().length > 0 || (expensesLoading && user)) && (
           <div className="monthly-trend-chart">
             <h3 className="chart-title">Monthly Trend (Last 6 Months)</h3>
@@ -894,6 +870,30 @@ function Dashboard({
             )}
           </div>
         ) : null}
+
+        {/* Chart Filter */}
+        {expenses.length > 0 && (
+          <div className="chart-filter-section">
+            <div className="filter-controls">
+              <label htmlFor="chart-filter" className="filter-label">Filter Charts:</label>
+              <select
+                id="chart-filter"
+                className="chart-filter-select"
+                value={chartFilter}
+                onChange={(e) => setChartFilter(e.target.value)}
+              >
+                <option value="current">Current Month</option>
+                <option value="previous">Previous Month</option>
+                <option value="3months">Last 3 Months</option>
+                <option value="6months">Last 6 Months</option>
+              </select>
+            </div>
+            <div className="filter-status">
+              <span className="status-label">Viewing:</span>
+              <span className="status-value">{getFilterLabel()}</span>
+            </div>
+          </div>
+        )}
 
         {expenses.length > 0 && categoryBreakdown.length > 0 && (
           <div className="category-breakdown">
