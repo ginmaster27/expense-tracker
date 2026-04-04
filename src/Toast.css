@@ -1,0 +1,61 @@
+/* Toast Notification Styles */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 16px 24px;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-weight: 500;
+  color: white;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  animation: slideUpToast 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  max-width: 90%;
+  word-wrap: break-word;
+  white-space: normal;
+}
+
+.toast-message {
+  flex: 1;
+  line-height: 1.5;
+}
+
+.toast-success {
+  background: linear-gradient(135deg, #5bb450 0%, #4a9940 100%);
+}
+
+.toast-error {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+}
+
+.toast-info {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+@keyframes slideUpToast {
+  from {
+    transform: translateX(-50%) translateY(100px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 480px) {
+  .toast {
+    bottom: 16px;
+    left: 12px;
+    right: 12px;
+    transform: none;
+    padding: 14px 16px;
+    font-size: 0.95rem;
+    max-width: 100%;
+  }
+}

@@ -4,6 +4,7 @@ import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import { auth, googleProvider, expensesAPI, incomeAPI } from './firebase';
 import Dashboard from './Dashboard';
 import ExpensesPage from './ExpenseList';
+import Toast from './Toast';
 import './App.css';
 
 function App() {
@@ -49,7 +50,22 @@ function App() {
   const [editingIncomeId, setEditingIncomeId] = useState(null);
   
   // Toggle states
+  const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [showIncomeForm, setShowIncomeForm] = useState(false);
+  
+  // Loading states for form submissions
+  const [isSubmittingExpense, setIsSubmittingExpense] = useState(false);
+  const [isSubmittingIncome, setIsSubmittingIncome] = useState(false);
+  
+  // Toast state
+  const [toast, setToast] = useState(null);
+  
+  const showToast = (message, type = 'success', duration = 3000) => {
+    setToast({ message, type, id: Date.now() });
+    setTimeout(() => {
+      setToast(null);
+    }, duration);
+  };
   
   const today = new Date();
   const [selectedMonth, setSelectedMonth] = useState(String(today.getMonth() + 1));
@@ -131,6 +147,7 @@ function App() {
   const handleAddExpense = async (e) => {
     e.preventDefault();
     setError('');
+    setIsSubmittingExpense(true);
     
     const trimmedCategory = category.trim();
     const numAmount = parseFloat(amount);
@@ -138,28 +155,33 @@ function App() {
     // Validate amount
     if (!amount || amount.trim() === '') {
       setError('Please enter an amount');
+      setIsSubmittingExpense(false);
       return;
     }
 
     if (isNaN(numAmount)) {
       setError('Amount must be a valid number');
+      setIsSubmittingExpense(false);
       return;
     }
 
     if (numAmount <= 0) {
       setError('Amount must be greater than 0');
+      setIsSubmittingExpense(false);
       return;
     }
 
     // Validate category
     if (!trimmedCategory) {
       setError('Please select a category');
+      setIsSubmittingExpense(false);
       return;
     }
 
     // Validate date - ensure it's selected
     if (!expenseDate) {
       setError('Please select a date');
+      setIsSubmittingExpense(false);
       return;
     }
 
@@ -171,6 +193,7 @@ function App() {
 
     if (selectedDate > today) {
       setError('Date cannot be in the future');
+      setIsSubmittingExpense(false);
       return;
     }
 
@@ -205,6 +228,7 @@ function App() {
           exp.id === editingExpenseId ? { id: editingExpenseId, ...newExpenseData } : exp
         ));
         setEditingExpenseId(null);
+        showToast('Expense updated successfully', 'success');
       } else {
         // Add new expense
         if (user) {
@@ -220,6 +244,7 @@ function App() {
           setExpenses([...expenses, newExpense]);
           localStorage.setItem('expenses', JSON.stringify([...expenses, newExpense]));
         }
+        showToast('Expense added successfully', 'success');
       }
 
       setAmount('');
@@ -234,6 +259,8 @@ function App() {
     } catch (error) {
       console.error('Error saving expense:', error);
       setError('Failed to save expense: ' + error.message);
+    } finally {
+      setIsSubmittingExpense(false);
     }
   };
 
@@ -251,9 +278,11 @@ function App() {
         }
         
         setExpenses(expenses.filter(expense => expense.id !== id));
+        showToast('Expense deleted successfully', 'success');
       } catch (error) {
         console.error('Error deleting expense:', error);
         setError('Failed to delete expense: ' + error.message);
+        showToast('Failed to delete expense', 'error');
       }
     }
   };
@@ -277,28 +306,33 @@ function App() {
   const handleAddIncome = async (e) => {
     e.preventDefault();
     setError('');
+    setIsSubmittingIncome(true);
     
     const numAmount = parseFloat(incomeAmount);
     
     // Validate amount
     if (!incomeAmount || incomeAmount.trim() === '') {
       setError('Please enter an income amount');
+      setIsSubmittingIncome(false);
       return;
     }
 
     if (isNaN(numAmount)) {
       setError('Amount must be a valid number');
+      setIsSubmittingIncome(false);
       return;
     }
 
     if (numAmount <= 0) {
       setError('Amount must be greater than 0');
+      setIsSubmittingIncome(false);
       return;
     }
 
     // Validate date
     if (!incomeDate) {
       setError('Please select a date');
+      setIsSubmittingIncome(false);
       return;
     }
 
@@ -310,6 +344,7 @@ function App() {
 
     if (selectedDate > today) {
       setError('Date cannot be in the future');
+      setIsSubmittingIncome(false);
       return;
     }
 
@@ -336,6 +371,7 @@ function App() {
           inc.id === editingIncomeId ? { id: editingIncomeId, ...newIncomeData } : inc
         ));
         setEditingIncomeId(null);
+        showToast('Income updated successfully', 'success');
       } else {
         // Add new income
         if (user) {
@@ -351,6 +387,7 @@ function App() {
           setIncome([...income, newIncome]);
           localStorage.setItem('income', JSON.stringify([...income, newIncome]));
         }
+        showToast('Income added successfully', 'success');
       }
 
       setIncomeAmount('');
@@ -361,6 +398,8 @@ function App() {
     } catch (error) {
       console.error('Error saving income:', error);
       setError('Failed to save income: ' + error.message);
+    } finally {
+      setIsSubmittingIncome(false);
     }
   };
 
@@ -379,9 +418,11 @@ function App() {
         }
         
         setIncome(income.filter(inc => inc.id !== id));
+        showToast('Income deleted successfully', 'success');
       } catch (error) {
         console.error('Error deleting income:', error);
         setError('Failed to delete income: ' + error.message);
+        showToast('Failed to delete income', 'error');
       }
     }
   };
@@ -981,11 +1022,15 @@ function App() {
               getExpensesByWeek={getExpensesByWeek}
               getMonthlyTrendData={getMonthlyTrendData}
               getMonthlyInsight={getMonthlyInsight}
+              showExpenseForm={showExpenseForm}
+              setShowExpenseForm={setShowExpenseForm}
               showIncomeForm={showIncomeForm}
               setShowIncomeForm={setShowIncomeForm}
               onCancelEdit={handleCancelEdit}
               formatDate={formatDate}
               expensesLoading={expensesLoading}
+              isSubmittingExpense={isSubmittingExpense}
+              isSubmittingIncome={isSubmittingIncome}
             />
           }
         />
@@ -1025,6 +1070,9 @@ function App() {
           }
         />
       </Routes>
+
+      {/* Toast Notification */}
+      {toast && <Toast message={toast.message} type={toast.type} />}
     </BrowserRouter>
   );
 }

@@ -50,6 +50,8 @@ function Dashboard({
   getExpensesByWeek,
   getMonthlyTrendData,
   getMonthlyInsight,
+  showExpenseForm,
+  setShowExpenseForm,
   showIncomeForm,
   setShowIncomeForm,
   onEditExpense,
@@ -58,10 +60,33 @@ function Dashboard({
   editingIncomeId,
   onCancelEdit,
   formatDate,
-  expensesLoading
+  expensesLoading,
+  isSubmittingExpense,
+  isSubmittingIncome
 }) {
   const navigate = useNavigate();
   const incomeFormRef = useRef(null);
+  
+  // Wrapper functions to close modals after form submission
+  const handleAddExpenseWithClose = async (e) => {
+    try {
+      await onAddExpense(e);
+      // Close modal after successful submission
+      setShowExpenseForm(false);
+    } catch (error) {
+      console.error('Error adding expense:', error);
+    }
+  };
+
+  const handleAddIncomeWithClose = async (e) => {
+    try {
+      await onAddIncome(e);
+      // Close modal after successful submission
+      setShowIncomeForm(false);
+    } catch (error) {
+      console.error('Error adding income:', error);
+    }
+  };
   
   // State for drilldowns and filters
   const [selectedWeek, setSelectedWeek] = useState(null);
@@ -422,267 +447,27 @@ function Dashboard({
           </>
         )}
 
-        <form className="expense-form" onSubmit={onAddExpense}>
-          <h2 className="form-title">Add Expense</h2>
-          {error && <div className="form-error">{error}</div>}
-          
-          <div className="form-group">
-            <label htmlFor="amount">Amount (₹)</label>
-            <input
-              id="amount"
-              type="number"
-              inputMode="decimal"
-              placeholder="0.00"
-              value={amount}
-              onChange={(e) => {
-                const val = e.target.value;
-                // Allow empty string for clearing the field, and valid positive decimals
-                if (val === '' || /^\d*\.?\d{0,2}$/.test(val)) {
-                  setAmount(val);
-                  if (error) setError('');
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  onAddExpense({ preventDefault: () => {} });
-                }
-              }}
-              min="0"
-              max="9999999.99"
-              step="0.01"
-              autoFocus
-              className={error && (!amount || parseFloat(amount) <= 0) ? 'input-error' : ''}
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="expense-date">Select Expense Date *</label>
-            <input
-              id="expense-date"
-              type="date"
-              value={expenseDate}
-              max={maxDate}
-              required
-              onChange={(e) => {
-                setExpenseDate(e.target.value);
-                if (error) setError('');
-              }}
-              className={error && !expenseDate ? 'input-error' : ''}
-            />
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="category">Category</label>
-            <div className="quick-select-buttons">
-              <button
-                type="button"
-                className={`quick-btn ${category === 'Food' ? 'active' : ''}`}
-                onClick={() => {
-                  setCategory('Food');
-                  if (error) setError('');
-                }}
-              >
-                🍔 Food
-              </button>
-              <button
-                type="button"
-                className={`quick-btn ${category === 'Travel' ? 'active' : ''}`}
-                onClick={() => {
-                  setCategory('Travel');
-                  if (error) setError('');
-                }}
-              >
-                ✈️ Travel
-              </button>
-              <button
-                type="button"
-                className={`quick-btn ${category === 'Rent' ? 'active' : ''}`}
-                onClick={() => {
-                  setCategory('Rent');
-                  if (error) setError('');
-                }}
-              >
-                🏠 Rent
-              </button>
-              <button
-                type="button"
-                className={`quick-btn ${category === 'Medical' ? 'active' : ''}`}
-                onClick={() => {
-                  setCategory('Medical');
-                  if (error) setError('');
-                }}
-              >
-                ⚕️ Medical
-              </button>
-            </div>
-            <select
-              id="category"
-              value={category}
-              onChange={(e) => {
-                setCategory(e.target.value);
-                if (error) setError('');
-              }}
-              className={error && !category ? 'input-error' : ''}
-            >
-              <option value="">Select a category</option>
-              <option value="Food">Food</option>
-              <option value="Travel">Travel</option>
-              <option value="Rent">Rent</option>
-              <option value="Groceries">Groceries</option>
-              <option value="Utilities">Utilities</option>
-              <option value="Entertainment">Entertainment</option>
-              <option value="Vehicle">Vehicle</option>
-              <option value="Medical">Medical</option>
-              <option value="Others">Others</option>
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="expense-description">Description (Optional)</label>
-            <textarea
-              id="expense-description"
-              placeholder="Add a description for this expense"
-              value={expenseDescription}
-              onChange={(e) => setExpenseDescription(e.target.value)}
-              rows="3"
-              className="expense-textarea"
-            />
-          </div>
-
-          <div className="form-group toggle-group">
-            <label htmlFor="expense-recurring-toggle">
-              <input
-                id="expense-recurring-toggle"
-                type="checkbox"
-                checked={isExpenseRecurring}
-                onChange={(e) => setIsExpenseRecurring(e.target.checked)}
-              />
-              <span className="toggle-label">Make this recurring</span>
-            </label>
-          </div>
-
-          {isExpenseRecurring && (
-            <>
-              <div className="form-group">
-                <label htmlFor="expense-frequency">Frequency</label>
-                <select
-                  id="expense-frequency"
-                  value={expenseFrequency}
-                  onChange={(e) => setExpenseFrequency(e.target.value)}
-                >
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="expense-end-date">End Date (Optional)</label>
-                <input
-                  id="expense-end-date"
-                  type="date"
-                  value={expenseEndDate}
-                  onChange={(e) => setExpenseEndDate(e.target.value)}
-                  min={expenseDate}
-                />
-                <small className="field-hint">Leave empty for ongoing recurring expenses</small>
-              </div>
-            </>
-          )}
-
-          <div className="button-group">
-            <button type="submit" className="add-btn">
-              {editingExpenseId ? '✓ Update Expense' : 'Add Expense'}
-            </button>
-            {editingExpenseId && (
-              <button type="button" className="cancel-btn" onClick={onCancelEdit}>
-                ✕ Cancel
-              </button>
-            )}
-          </div>
-        </form>
-
-        <div className="income-form-toggle">
+        {/* Action Buttons */}
+        <div className="action-buttons">
           <button
-            className="toggle-btn"
-            onClick={() => setShowIncomeForm(!showIncomeForm)}
-            title={showIncomeForm ? "Hide income form" : "Show income form"}
-            aria-label={showIncomeForm ? "Hide income form" : "Show income form"}
+            className="action-btn expense-action-btn"
+            onClick={() => setShowExpenseForm(!showExpenseForm)}
+            title="Add a new expense"
+            aria-label="Add a new expense"
           >
-            {showIncomeForm ? '▼ Hide Income Form' : '▶ Add Income'}
+            <span className="btn-icon">➕</span>
+            <span className="btn-text">Add Expense</span>
+          </button>
+          <button
+            className="action-btn income-action-btn"
+            onClick={() => setShowIncomeForm(!showIncomeForm)}
+            title="Add a new income"
+            aria-label="Add a new income"
+          >
+            <span className="btn-icon">➕</span>
+            <span className="btn-text">Add Income</span>
           </button>
         </div>
-
-        {showIncomeForm && (
-          <form className="income-form" ref={incomeFormRef} onSubmit={onAddIncome}>
-            <h2 className="form-title">Add Income</h2>
-            {error && <div className="form-error">{error}</div>}
-            
-            <div className="form-group">
-              <label htmlFor="income-amount">Amount (₹)</label>
-              <input
-                id="income-amount"
-                type="number"
-                inputMode="decimal"
-                placeholder="0.00"
-                value={incomeAmount}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  // Allow empty string for clearing the field, and valid positive decimals
-                  if (val === '' || /^\d*\.?\d{0,2}$/.test(val)) {
-                    setIncomeAmount(val);
-                    if (error) setError('');
-                  }
-                }}
-                min="0"
-                max="9999999.99"
-                step="0.01"
-                className={error && (!incomeAmount || parseFloat(incomeAmount) <= 0) ? 'input-error' : ''}
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="income-source">Source (Optional)</label>
-              <input
-                id="income-source"
-                type="text"
-                placeholder="e.g., Salary, Freelance, Investment"
-                value={incomeSource}
-                onChange={(e) => {
-                  setIncomeSource(e.target.value);
-                  if (error) setError('');
-                }}
-              />
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="income-date">Select Income Date *</label>
-              <input
-                id="income-date"
-                type="date"
-                value={incomeDate}
-                max={maxDate}
-                required
-                onChange={(e) => {
-                  setIncomeDate(e.target.value);
-                  if (error) setError('');
-                }}
-                className={error && !incomeDate ? 'input-error' : ''}
-              />
-            </div>
-
-            <div className="button-group">
-              <button type="submit" className="add-btn">
-                {editingIncomeId ? '✓ Update Income' : 'Add Income'}
-              </button>
-              {editingIncomeId && (
-                <button type="button" className="cancel-btn" onClick={onCancelEdit}>
-                  ✕ Cancel
-                </button>
-              )}
-            </div>
-          </form>
-        )}
 
         {income.length > 0 && (
           <div className="income-section">
@@ -1026,7 +811,7 @@ function Dashboard({
               <div className="empty-icon">💰</div>
               <h3 className="empty-title">No expenses yet</h3>
               <p className="empty-message">Start tracking your finances to see insights and analytics!</p>
-              <button className="empty-cta" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+              <button className="empty-cta" onClick={() => setShowExpenseForm(true)}>
                 ➕ Add Your First Expense
               </button>
             </div>
@@ -1203,7 +988,309 @@ function Dashboard({
           </div>
         </>
       )}
-        </div>
+
+        {/* Form Modal Overlay */}
+        {(showExpenseForm || showIncomeForm) && (
+          <>
+            <div 
+              className="form-modal-backdrop"
+              onClick={() => {
+                setShowExpenseForm(false);
+                setShowIncomeForm(false);
+              }}
+              aria-hidden="true"
+            />
+            <div className="form-modal-wrapper">
+              {showExpenseForm && (
+                <form className="form-modal-content expense-form" onSubmit={handleAddExpenseWithClose}>
+                  <div className="form-header">
+                    <h2 className="form-title">Add Expense</h2>
+                    <button
+                      type="button"
+                      className="form-close-btn"
+                      onClick={() => setShowExpenseForm(false)}
+                      title="Close expense form"
+                      aria-label="Close expense form"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {error && <div className="form-error">{error}</div>}
+                  
+                  <div className="form-group">
+                    <label htmlFor="amount">Amount (₹)</label>
+                    <input
+                      id="amount"
+                      type="number"
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      value={amount}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '' || /^\d*\.?\d{0,2}$/.test(val)) {
+                          setAmount(val);
+                          if (error) setError('');
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          onAddExpense({ preventDefault: () => {} });
+                        }
+                      }}
+                      min="0"
+                      max="9999999.99"
+                      step="0.01"
+                      autoFocus
+                      className={error && (!amount || parseFloat(amount) <= 0) ? 'input-error' : ''}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="expense-date">Select Expense Date *</label>
+                    <input
+                      id="expense-date"
+                      type="date"
+                      value={expenseDate}
+                      max={maxDate}
+                      required
+                      onChange={(e) => {
+                        setExpenseDate(e.target.value);
+                        if (error) setError('');
+                      }}
+                      className={error && !expenseDate ? 'input-error' : ''}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="category">Category</label>
+                    <div className="quick-select-buttons">
+                      <button
+                        type="button"
+                        className={`quick-btn ${category === 'Food' ? 'active' : ''}`}
+                        onClick={() => {
+                          setCategory('Food');
+                          if (error) setError('');
+                        }}
+                      >
+                        🍔 Food
+                      </button>
+                      <button
+                        type="button"
+                        className={`quick-btn ${category === 'Travel' ? 'active' : ''}`}
+                        onClick={() => {
+                          setCategory('Travel');
+                          if (error) setError('');
+                        }}
+                      >
+                        ✈️ Travel
+                      </button>
+                      <button
+                        type="button"
+                        className={`quick-btn ${category === 'Rent' ? 'active' : ''}`}
+                        onClick={() => {
+                          setCategory('Rent');
+                          if (error) setError('');
+                        }}
+                      >
+                        🏠 Rent
+                      </button>
+                      <button
+                        type="button"
+                        className={`quick-btn ${category === 'Medical' ? 'active' : ''}`}
+                        onClick={() => {
+                          setCategory('Medical');
+                          if (error) setError('');
+                        }}
+                      >
+                        ⚕️ Medical
+                      </button>
+                    </div>
+                    <select
+                      id="category"
+                      value={category}
+                      onChange={(e) => {
+                        setCategory(e.target.value);
+                        if (error) setError('');
+                      }}
+                      className={error && !category ? 'input-error' : ''}
+                    >
+                      <option value="">Select a category</option>
+                      <option value="Food">Food</option>
+                      <option value="Travel">Travel</option>
+                      <option value="Rent">Rent</option>
+                      <option value="Groceries">Groceries</option>
+                      <option value="Utilities">Utilities</option>
+                      <option value="Entertainment">Entertainment</option>
+                      <option value="Vehicle">Vehicle</option>
+                      <option value="Medical">Medical</option>
+                      <option value="Others">Others</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="expense-description">Description (Optional)</label>
+                    <textarea
+                      id="expense-description"
+                      placeholder="Add a description for this expense"
+                      value={expenseDescription}
+                      onChange={(e) => setExpenseDescription(e.target.value)}
+                      rows="3"
+                      className="expense-textarea"
+                    />
+                  </div>
+
+                  <div className="form-group toggle-group">
+                    <label htmlFor="expense-recurring-toggle">
+                      <input
+                        id="expense-recurring-toggle"
+                        type="checkbox"
+                        checked={isExpenseRecurring}
+                        onChange={(e) => setIsExpenseRecurring(e.target.checked)}
+                      />
+                      <span className="toggle-label">Make this recurring</span>
+                    </label>
+                  </div>
+
+                  {isExpenseRecurring && (
+                    <>
+                      <div className="form-group">
+                        <label htmlFor="expense-frequency">Frequency</label>
+                        <select
+                          id="expense-frequency"
+                          value={expenseFrequency}
+                          onChange={(e) => setExpenseFrequency(e.target.value)}
+                        >
+                          <option value="weekly">Weekly</option>
+                          <option value="monthly">Monthly</option>
+                        </select>
+                      </div>
+
+                      <div className="form-group">
+                        <label htmlFor="expense-end-date">End Date (Optional)</label>
+                        <input
+                          id="expense-end-date"
+                          type="date"
+                          value={expenseEndDate}
+                          onChange={(e) => setExpenseEndDate(e.target.value)}
+                          min={expenseDate}
+                        />
+                        <small className="field-hint">Leave empty for ongoing recurring expenses</small>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="button-group">
+                    <button type="submit" className="add-btn" disabled={isSubmittingExpense}>
+                      {isSubmittingExpense ? (
+                        <>
+                          <span className="btn-spinner"></span>
+                          <span className="btn-text">Saving...</span>
+                        </>
+                      ) : (
+                        editingExpenseId ? '✓ Update Expense' : 'Add Expense'
+                      )}
+                    </button>
+                    {editingExpenseId && (
+                      <button type="button" className="cancel-btn" onClick={onCancelEdit}>
+                        ✕ Cancel
+                      </button>
+                    )}
+                  </div>
+                </form>
+              )}
+
+              {showIncomeForm && (
+                <form className="form-modal-content income-form" ref={incomeFormRef} onSubmit={handleAddIncomeWithClose}>
+                  <div className="form-header">
+                    <h2 className="form-title">Add Income</h2>
+                    <button
+                      type="button"
+                      className="form-close-btn"
+                      onClick={() => setShowIncomeForm(false)}
+                      title="Close income form"
+                      aria-label="Close income form"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {error && <div className="form-error">{error}</div>}
+                  
+                  <div className="form-group">
+                    <label htmlFor="income-amount">Amount (₹)</label>
+                    <input
+                      id="income-amount"
+                      type="number"
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      value={incomeAmount}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '' || /^\d*\.?\d{0,2}$/.test(val)) {
+                          setIncomeAmount(val);
+                          if (error) setError('');
+                        }
+                      }}
+                      min="0"
+                      max="9999999.99"
+                      step="0.01"
+                      className={error && (!incomeAmount || parseFloat(incomeAmount) <= 0) ? 'input-error' : ''}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="income-source">Source (Optional)</label>
+                    <input
+                      id="income-source"
+                      type="text"
+                      placeholder="e.g., Salary, Freelance, Investment"
+                      value={incomeSource}
+                      onChange={(e) => {
+                        setIncomeSource(e.target.value);
+                        if (error) setError('');
+                      }}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="income-date">Select Income Date *</label>
+                    <input
+                      id="income-date"
+                      type="date"
+                      value={incomeDate}
+                      max={maxDate}
+                      required
+                      onChange={(e) => {
+                        setIncomeDate(e.target.value);
+                        if (error) setError('');
+                      }}
+                      className={error && !incomeDate ? 'input-error' : ''}
+                    />
+                  </div>
+
+                  <div className="button-group">
+                    <button type="submit" className="add-btn" disabled={isSubmittingIncome}>
+                      {isSubmittingIncome ? (
+                        <>
+                          <span className="btn-spinner"></span>
+                          <span className="btn-text">Saving...</span>
+                        </>
+                      ) : (
+                        editingIncomeId ? '✓ Update Income' : 'Add Income'
+                      )}
+                    </button>
+                    {editingIncomeId && (
+                      <button type="button" className="cancel-btn" onClick={onCancelEdit}>
+                        ✕ Cancel
+                      </button>
+                    )}
+                  </div>
+                </form>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
