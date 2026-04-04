@@ -1,4 +1,5 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useState, useRef } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, LineChart, Line } from 'recharts';
 import logo from './assets/logo.png';
 
@@ -26,6 +27,7 @@ function Dashboard({
   formatCurrency,
   totalAmount,
   getCategoryBreakdown,
+  getCategoryBreakdownByFilter,
   user,
   authLoading,
   onSignInWithGoogle,
@@ -58,14 +60,69 @@ function Dashboard({
   formatDate,
   expensesLoading
 }) {
+  const navigate = useNavigate();
+  const incomeFormRef = useRef(null);
+  
+  // State for drilldowns and filters
+  const [selectedWeek, setSelectedWeek] = useState(null);
+  const [weeklyViewMode, setWeeklyViewMode] = useState('categories'); // 'categories' or 'all-expenses'
+  const [showAllExpensesDrawer, setShowAllExpensesDrawer] = useState(false);
+  const [chartFilter, setChartFilter] = useState('current'); // 'current', 'previous', '3months', '6months'
+
   const CHART_COLORS = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b', '#fa709a', '#30cfd0', '#a8edea'];
-  const categoryBreakdown = getCategoryBreakdown();
+  
+  // GLOBAL FILTER STATE: Calculate filtered expenses once based on chart filter
+  const getFilteredExpensesByDateRange = () => {
+    const today = new Date();
+    let startDate = new Date();
+    let endDate = new Date(today);
+
+    if (chartFilter === 'current') {
+      startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+    } else if (chartFilter === 'previous') {
+      const prevMonth = today.getMonth() === 0 ? 11 : today.getMonth() - 1;
+      const prevYear = today.getMonth() === 0 ? today.getFullYear() - 1 : today.getFullYear();
+      startDate = new Date(prevYear, prevMonth, 1);
+      endDate = new Date(prevYear, prevMonth + 1, 0);
+    } else if (chartFilter === '3months') {
+      startDate = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+    } else if (chartFilter === '6months') {
+      startDate = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+    }
+
+    return expenses.filter((expense) => {
+      const expenseDate = new Date(expense.date);
+      return expenseDate >= startDate && expenseDate <= endDate;
+    });
+  };
+
+  // Single source of truth for filtered expenses - calculated once per render
+  const filteredExpenses = getFilteredExpensesByDateRange();
+
+  // Use filtered category breakdown based on selected date range
+  const categoryBreakdown = getCategoryBreakdownByFilter(chartFilter);
   
   // Get month name from selected month number
   const getMonthName = () => {
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const monthNum = parseInt(selectedMonth);
     return months[monthNum - 1] || 'Current';
+  };
+
+  // Get readable label for current filter
+  const getFilterLabel = () => {
+    switch (chartFilter) {
+      case 'current':
+        return 'Current Month';
+      case 'previous':
+        return 'Previous Month';
+      case '3months':
+        return 'Last 3 Months';
+      case '6months':
+        return 'Last 6 Months';
+      default:
+        return 'Current Month';
+    }
   };
   
   // Get today's date in YYYY-MM-DD format for max date on input
@@ -76,33 +133,78 @@ function Dashboard({
   
   const maxDate = getMaxDate();
 
-  // Calculate highest spending category
-  const getHighestSpendingCategory = () => {
+  // Get highest spending category from filtered data
+  const getHighestSpendingCategoryByFilter = () => {
     if (categoryBreakdown.length === 0) return null;
-    const highest = categoryBreakdown.reduce((max, item) => 
-      item.total > max.total ? item : max
-    );
-    return highest;
+    return categoryBreakdown[0]; // Already sorted by getCategoryBreakdownByFilter
   };
 
-  // Calculate weekend vs weekday spending
-  const getWeekendVsWeekdaySpending = () => {
+  // Get spending pattern from filtered data
+  const getSpendingPatternByFilter = () => {
     let weekendTotal = 0;
     let weekdayTotal = 0;
-    
-    expenses.forEach(expense => {
+
+    filteredExpenses.forEach((expense) => {
       const expenseDate = new Date(expense.date);
       const dayOfWeek = expenseDate.getDay();
       const amount = parseFloat(expense.amount) || 0;
-      
+
       if (dayOfWeek === 0 || dayOfWeek === 6) {
         weekendTotal += amount;
       } else {
         weekdayTotal += amount;
       }
     });
-    
+
     return { weekendTotal, weekdayTotal };
+  };
+
+  // Get average daily spending from filtered data
+  const getAverageDailySpendingByFilter = () => {
+    if (filteredExpenses.length === 0) return 0;
+
+    const totalSpending = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+    
+    // Calculate unique days with expenses
+    const uniqueDays = new Set();
+    filteredExpenses.forEach((expense) => {
+      uniqueDays.add(expense.date);
+    });
+
+    return totalSpending / uniqueDays.size;
+  };
+
+  // Get highest spending day from filtered data
+  const getHighestSpendingDayByFilter = () => {
+    if (filteredExpenses.length === 0) return null;
+
+    const dayTotals = {};
+    const dayDates = {};
+
+    filteredExpenses.forEach((expense) => {
+      const date = expense.date;
+      if (!dayTotals[date]) {
+        dayTotals[date] = 0;
+        dayDates[date] = new Date(date);
+      }
+      dayTotals[date] += expense.amount;
+    });
+
+    let highestDay = null;
+    let highestAmount = 0;
+
+    Object.entries(dayTotals).forEach(([date, total]) => {
+      if (total > highestAmount) {
+        highestAmount = total;
+        highestDay = {
+          date,
+          total,
+          dayName: dayDates[date].toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+        };
+      }
+    });
+
+    return highestDay;
   };
 
   // Calculate amount saved this month
@@ -110,6 +212,68 @@ function Dashboard({
     const filteredIncome = getFilteredIncomeTotal ? getFilteredIncomeTotal() : totalIncome;
     const filteredExpenses = getFilteredTotal ? getFilteredTotal() : totalAmount;
     return Math.max(filteredIncome - filteredExpenses, 0);
+  };
+
+  // Handle navigation to expenses page
+  const handleExpenseCardClick = () => {
+    navigate('/expenses');
+  };
+
+  // Handle smooth scroll to income section
+  const handleIncomeCardClick = () => {
+    setShowIncomeForm(true);
+    setTimeout(() => {
+      if (incomeFormRef.current) {
+        incomeFormRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 0);
+  };
+
+  // Handle week bar click for drilldown
+  const handleWeekClick = (data) => {
+    const weekData = getExpensesByWeek().find(week => week.label === data.label);
+    if (weekData) {
+      setSelectedWeek(weekData);
+    }
+  };
+
+  // Close the week drawer
+  const closeWeekDrawer = () => {
+    setSelectedWeek(null);
+    setWeeklyViewMode('categories');
+  };
+
+  // Calculate category breakdown for a specific week
+  const getCategoryBreakdownForWeek = (weekData) => {
+    const categories = {};
+    
+    if (weekData && weekData.expenses) {
+      weekData.expenses.forEach((expense) => {
+        if (!categories[expense.category]) {
+          categories[expense.category] = 0;
+        }
+        categories[expense.category] += expense.amount;
+      });
+    }
+
+    return Object.entries(categories).map(([category, total]) => ({
+      category,
+      total
+    }));
+  };
+
+  // Toggle between category view and all expenses view in weekly drawer
+  const toggleWeeklyViewMode = (mode) => {
+    setWeeklyViewMode(mode);
+  };
+
+  // Handlers for all expenses drawer
+  const openAllExpensesDrawer = () => {
+    setShowAllExpensesDrawer(true);
+  };
+
+  const closeAllExpensesDrawer = () => {
+    setShowAllExpensesDrawer(false);
   };
   
   return (
@@ -177,6 +341,7 @@ function Dashboard({
           </div>
         </div>
 
+        <div className="content-wrapper">
         {(income.length > 0 || expenses.length > 0 || expensesLoading) && (
           <>
             {expensesLoading && user ? (
@@ -202,7 +367,17 @@ function Dashboard({
                 {(income.length > 0 || expenses.length > 0) && (
                   <div className="financial-cards">
                     {income.length > 0 && (
-                      <div className="financial-card income-card">
+                      <div 
+                        className="financial-card income-card interactive-card" 
+                        onClick={handleIncomeCardClick}
+                        role="button"
+                        tabIndex="0"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            handleIncomeCardClick();
+                          }
+                        }}
+                      >
                         <div className="card-header">
                           <h4 className="card-title">Monthly Income</h4>
                         </div>
@@ -212,7 +387,17 @@ function Dashboard({
                         <p className="card-subtitle">{income.length} source{income.length !== 1 ? 's' : ''}</p>
                       </div>
                     )}
-                    <div className="financial-card expense-card">
+                    <div 
+                      className="financial-card expense-card interactive-card" 
+                      onClick={handleExpenseCardClick}
+                      role="button"
+                      tabIndex="0"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          handleExpenseCardClick();
+                        }
+                      }}
+                    >
                       <div className="card-header">
                         <h4 className="card-title">Monthly Expenses</h4>
                       </div>
@@ -429,7 +614,7 @@ function Dashboard({
         </div>
 
         {showIncomeForm && (
-          <form className="income-form" onSubmit={onAddIncome}>
+          <form className="income-form" ref={incomeFormRef} onSubmit={onAddIncome}>
             <h2 className="form-title">Add Income</h2>
             {error && <div className="form-error">{error}</div>}
             
@@ -550,72 +735,29 @@ function Dashboard({
           </div>
         )}
 
-        {((expenses.length > 0 || expensesLoading) && getExpensesByWeek().length > 0) || (expensesLoading && user) ? (
-          <div className="weekly-expenses-chart">
-            <h3 className="chart-title">Weekly Expenses - {getMonthName()}</h3>
-            
-            {expensesLoading && user ? (
-              <div className="chart-loading">
-                <div className="spinner"></div>
-              </div>
-            ) : (
-              <>
-                <div className="chart-container">
-                  <ResponsiveContainer width="100%" height={350}>
-                    <BarChart
-                      data={getExpensesByWeek()}
-                      margin={{ top: 20, right: 30, left: 0, bottom: 20 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                      <XAxis 
-                        dataKey="label" 
-                        tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
-                        axisLine={{ stroke: 'var(--border-color)' }}
-                      />
-                      <YAxis 
-                        tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
-                        axisLine={{ stroke: 'var(--border-color)' }}
-                        tickFormatter={(value) => formatCurrency(value)}
-                      />
-                      <Tooltip 
-                        formatter={(value) => formatCurrency(value)}
-                        contentStyle={{
-                          backgroundColor: 'var(--bg-secondary)',
-                          border: `1px solid var(--border-color)`,
-                          borderRadius: '8px',
-                          color: 'var(--text-primary)'
-                        }}
-                        labelStyle={{ color: 'var(--text-primary)' }}
-                      />
-                      <Legend 
-                        wrapperStyle={{ paddingTop: '20px', color: 'var(--text-secondary)' }}
-                      />
-                      <Bar 
-                        dataKey="total" 
-                        fill="var(--accent-primary)" 
-                        name="Expenses"
-                        radius={[8, 8, 0, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-
-                <div className="weekly-summary">
-                  {getExpensesByWeek().map((week) => {
-                    const startDateStr = week.startDate ? week.startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-                    return (
-                      <div key={week.label} className="weekly-item">
-                        <span className="weekly-label">{week.label} ({startDateStr})</span>
-                        <span className="weekly-amount">{formatCurrency(week.total)}</span>
-                        <span className="weekly-count">({week.count} expense{week.count !== 1 ? 's' : ''})</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
+        {/* Chart Filter */}
+        {expenses.length > 0 && (
+          <div className="chart-filter-section">
+            <div className="filter-controls">
+              <label htmlFor="chart-filter" className="filter-label">Filter Charts:</label>
+              <select
+                id="chart-filter"
+                className="chart-filter-select"
+                value={chartFilter}
+                onChange={(e) => setChartFilter(e.target.value)}
+              >
+                <option value="current">Current Month</option>
+                <option value="previous">Previous Month</option>
+                <option value="3months">Last 3 Months</option>
+                <option value="6months">Last 6 Months</option>
+              </select>
+            </div>
+            <div className="filter-status">
+              <span className="status-label">Viewing:</span>
+              <span className="status-value">{getFilterLabel()}</span>
+            </div>
           </div>
-        ) : null}
+        )}
 
         {(expenses.length > 0 || expensesLoading) && (getMonthlyTrendData().length > 0 || (expensesLoading && user)) && (
           <div className="monthly-trend-chart">
@@ -673,6 +815,86 @@ function Dashboard({
           </div>
         )}
 
+        {((expenses.length > 0 || expensesLoading) && getExpensesByWeek().length > 0) || (expensesLoading && user) ? (
+          <div className="weekly-expenses-chart">
+            <h3 className="chart-title">Weekly Expenses - {getMonthName()}</h3>
+            
+            {expensesLoading && user ? (
+              <div className="chart-loading">
+                <div className="spinner"></div>
+              </div>
+            ) : (
+              <>
+                <div className="chart-container">
+                  <ResponsiveContainer width="100%" height={350}>
+                    <BarChart
+                      data={getExpensesByWeek()}
+                      margin={{ top: 20, right: 30, left: 0, bottom: 20 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                      <XAxis 
+                        dataKey="label" 
+                        tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+                        axisLine={{ stroke: 'var(--border-color)' }}
+                      />
+                      <YAxis 
+                        tick={{ fill: 'var(--text-secondary)', fontSize: 12 }}
+                        axisLine={{ stroke: 'var(--border-color)' }}
+                        tickFormatter={(value) => formatCurrency(value)}
+                      />
+                      <Tooltip 
+                        formatter={(value) => formatCurrency(value)}
+                        contentStyle={{
+                          backgroundColor: 'var(--bg-secondary)',
+                          border: `1px solid var(--border-color)`,
+                          borderRadius: '8px',
+                          color: 'var(--text-primary)'
+                        }}
+                        labelStyle={{ color: 'var(--text-primary)' }}
+                      />
+                      <Legend 
+                        wrapperStyle={{ paddingTop: '20px', color: 'var(--text-secondary)' }}
+                      />
+                      <Bar 
+                        dataKey="total" 
+                        fill="var(--accent-primary)" 
+                        name="Expenses"
+                        radius={[8, 8, 0, 0]}
+                        onClick={(data) => handleWeekClick(data)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="weekly-summary">
+                  {getExpensesByWeek().map((week) => {
+                    const startDateStr = week.startDate ? week.startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+                    return (
+                      <div 
+                        key={week.label} 
+                        className="weekly-item interactive-weekly-item"
+                        onClick={() => handleWeekClick({ label: week.label })}
+                        role="button"
+                        tabIndex="0"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            handleWeekClick({ label: week.label });
+                          }
+                        }}
+                      >
+                        <span className="weekly-label">{week.label} ({startDateStr})</span>
+                        <span className="weekly-amount">{formatCurrency(week.total)}</span>
+                        <span className="weekly-count">({week.count} expense{week.count !== 1 ? 's' : ''})</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        ) : null}
+
         {expenses.length > 0 && categoryBreakdown.length > 0 && (
           <div className="category-breakdown">
             <h3 className="breakdown-title">Category Breakdown</h3>
@@ -706,6 +928,15 @@ function Dashboard({
                 </div>
               ))}
             </div>
+
+            <button 
+              className="view-all-btn"
+              onClick={openAllExpensesDrawer}
+              title="View all expenses"
+              aria-label="View all expenses"
+            >
+              📋 View All Expenses
+            </button>
           </div>
         )}
 
@@ -713,15 +944,15 @@ function Dashboard({
           <div className="insights-section">
             <h3 className="insights-title">📊 Your Insights</h3>
             <div className="insights-grid">
-              {getHighestSpendingCategory() && (
+              {getHighestSpendingCategoryByFilter() && (
                 <div className="insight-card">
                   <div className="insight-icon">🎯</div>
                   <div className="insight-content">
                     <p className="insight-label">Highest Spending</p>
                     <p className="insight-value">
-                      Your highest spending category is <strong>{getHighestSpendingCategory().category}</strong>
+                      Your highest spending category is <strong>{getHighestSpendingCategoryByFilter().category}</strong>
                     </p>
-                    <p className="insight-amount">{formatCurrency(getHighestSpendingCategory().total)}</p>
+                    <p className="insight-amount">{formatCurrency(getHighestSpendingCategoryByFilter().total)}</p>
                   </div>
                 </div>
               )}
@@ -732,13 +963,40 @@ function Dashboard({
                   <div className="insight-content">
                     <p className="insight-label">Spending Pattern</p>
                     <p className="insight-value">
-                      {getWeekendVsWeekdaySpending().weekendTotal > getWeekendVsWeekdaySpending().weekdayTotal
+                      {getSpendingPatternByFilter().weekendTotal > getSpendingPatternByFilter().weekdayTotal
                         ? '💸 You spent more on weekends'
                         : '📌 You spent more on weekdays'}
                     </p>
                     <p className="insight-breakdown">
-                      Weekends: {formatCurrency(getWeekendVsWeekdaySpending().weekendTotal)} | 
-                      Weekdays: {formatCurrency(getWeekendVsWeekdaySpending().weekdayTotal)}
+                      Weekends: {formatCurrency(getSpendingPatternByFilter().weekendTotal)} | 
+                      Weekdays: {formatCurrency(getSpendingPatternByFilter().weekdayTotal)}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {getAverageDailySpendingByFilter() > 0 && (
+                <div className="insight-card">
+                  <div className="insight-icon">💰</div>
+                  <div className="insight-content">
+                    <p className="insight-label">Daily Average</p>
+                    <p className="insight-value">
+                      You spend an average of <strong>{formatCurrency(getAverageDailySpendingByFilter())}</strong> per day
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {getHighestSpendingDayByFilter() && (
+                <div className="insight-card">
+                  <div className="insight-icon">📈</div>
+                  <div className="insight-content">
+                    <p className="insight-label">Highest Spending Day</p>
+                    <p className="insight-value">
+                      Your biggest spending was on <strong>{getHighestSpendingDayByFilter().dayName}</strong>
+                    </p>
+                    <p className="insight-breakdown">
+                      {getHighestSpendingDayByFilter().date} • {formatCurrency(getHighestSpendingDayByFilter().total)}
                     </p>
                   </div>
                 </div>
@@ -775,6 +1033,177 @@ function Dashboard({
           </div>
         )}
       </div>
+
+      {/* Week Drilldown Drawer */}
+      {selectedWeek && (
+        <>
+          <div className="drawer-overlay" onClick={closeWeekDrawer}></div>
+          <div className="week-drawer">
+            <div className="drawer-header">
+              <h3 className="drawer-title">{selectedWeek.label} Expenses</h3>
+              <button 
+                className="drawer-close-btn" 
+                onClick={closeWeekDrawer}
+                title="Close"
+                aria-label="Close week details"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* View Mode Toggle */}
+            <div className="drawer-mode-toggle">
+              <button
+                className={`mode-btn ${weeklyViewMode === 'categories' ? 'active' : ''}`}
+                onClick={() => toggleWeeklyViewMode('categories')}
+              >
+                📊 By Category
+              </button>
+              <button
+                className={`mode-btn ${weeklyViewMode === 'all-expenses' ? 'active' : ''}`}
+                onClick={() => toggleWeeklyViewMode('all-expenses')}
+              >
+                📋 All Expenses
+              </button>
+            </div>
+
+            <div className="drawer-content">
+              {selectedWeek.expenses && selectedWeek.expenses.length > 0 ? (
+                <>
+                  <div className="drawer-summary">
+                    <div className="summary-row">
+                      <span className="summary-label">Total Expenses:</span>
+                      <span className="summary-value">{formatCurrency(selectedWeek.total)}</span>
+                    </div>
+                    <div className="summary-row">
+                      <span className="summary-label">Number of Expenses:</span>
+                      <span className="summary-value">{selectedWeek.count}</span>
+                    </div>
+                    {selectedWeek.startDate && (
+                      <div className="summary-row">
+                        <span className="summary-label">Period:</span>
+                        <span className="summary-value">
+                          {selectedWeek.startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {selectedWeek.endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {weeklyViewMode === 'categories' ? (
+                    // Category Breakdown View
+                    <div className="drawer-categories-list">
+                      <h4 className="list-subtitle">Spending by Category</h4>
+                      {getCategoryBreakdownForWeek(selectedWeek).map((item) => (
+                        <div key={item.category} className="drawer-category-item">
+                          <span className="category-name">{item.category}</span>
+                          <span className="category-amount">{formatCurrency(item.total)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    // All Expenses View
+                    <div className="drawer-expenses-list">
+                      {selectedWeek.expenses.map((expense) => (
+                        <div key={expense.id} className="drawer-expense-item">
+                          <div className="item-header">
+                            <div className="item-category">
+                              {expense.category}
+                            </div>
+                            <div className="item-amount">
+                              {formatCurrency(expense.amount)}
+                            </div>
+                          </div>
+                          {expense.description && (
+                            <div className="item-description">
+                              {expense.description}
+                            </div>
+                          )}
+                          <div className="item-date">
+                            {formatDate(expense.date)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="drawer-empty">
+                  <p>No expenses for this week</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* All Expenses Drawer */}
+      {showAllExpensesDrawer && (
+        <>
+          <div className="drawer-overlay" onClick={closeAllExpensesDrawer}></div>
+          <div className="week-drawer all-expenses-drawer">
+            <div className="drawer-header">
+              <h3 className="drawer-title">All Expenses - {getMonthName()}</h3>
+              <button 
+                className="drawer-close-btn" 
+                onClick={closeAllExpensesDrawer}
+                title="Close"
+                aria-label="Close all expenses"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="drawer-content">
+              {expenses && expenses.length > 0 ? (
+                <>
+                  <div className="drawer-summary">
+                    <div className="summary-row">
+                      <span className="summary-label">Total Expenses:</span>
+                      <span className="summary-value">{formatCurrency(getFilteredTotal())}</span>
+                    </div>
+                    <div className="summary-row">
+                      <span className="summary-label">Number of Expenses:</span>
+                      <span className="summary-value">{expenses.length}</span>
+                    </div>
+                    <div className="summary-row">
+                      <span className="summary-label">Average per Expense:</span>
+                      <span className="summary-value">{formatCurrency(expenses.length > 0 ? getFilteredTotal() / expenses.length : 0)}</span>
+                    </div>
+                  </div>
+
+                  <div className="drawer-expenses-list">
+                    {expenses.map((expense) => (
+                      <div key={expense.id} className="drawer-expense-item">
+                        <div className="item-header">
+                          <div className="item-category">
+                            {expense.category}
+                          </div>
+                          <div className="item-amount">
+                            {formatCurrency(expense.amount)}
+                          </div>
+                        </div>
+                        {expense.description && (
+                          <div className="item-description">
+                            {expense.description}
+                          </div>
+                        )}
+                        <div className="item-date">
+                          {formatDate(expense.date)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="drawer-empty">
+                  <p>No expenses to display</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+        </div>
     </div>
   );
 }

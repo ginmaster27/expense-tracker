@@ -742,7 +742,53 @@ function App() {
     };
   };
 
+  // Filter expenses by selected date range
+  const getFilteredExpensesByDateRange = (filterType) => {
+    const today = new Date();
+    let startDate = new Date();
+    let endDate = new Date(today);
 
+    if (filterType === 'current') {
+      // Current month - from 1st to today
+      startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+    } else if (filterType === 'previous') {
+      // Previous month - entire previous month
+      const prevMonth = today.getMonth() === 0 ? 11 : today.getMonth() - 1;
+      const prevYear = today.getMonth() === 0 ? today.getFullYear() - 1 : today.getFullYear();
+      startDate = new Date(prevYear, prevMonth, 1);
+      // End date is the last day of previous month
+      endDate = new Date(prevYear, prevMonth + 1, 0);
+    } else if (filterType === '3months') {
+      // Last 3 months
+      startDate = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+    } else if (filterType === '6months') {
+      // Last 6 months
+      startDate = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+    }
+
+    return expenses.filter((expense) => {
+      const expenseDate = new Date(expense.date);
+      return expenseDate >= startDate && expenseDate <= endDate;
+    });
+  };
+
+  // Get category breakdown for filtered expenses
+  const getCategoryBreakdownByFilter = (filterType) => {
+    const filteredExpenses = getFilteredExpensesByDateRange(filterType);
+    const breakdown = {};
+
+    filteredExpenses.forEach((expense) => {
+      if (breakdown[expense.category]) {
+        breakdown[expense.category] += expense.amount;
+      } else {
+        breakdown[expense.category] = expense.amount;
+      }
+    });
+
+    return Object.entries(breakdown)
+      .map(([category, total]) => ({ category, total }))
+      .sort((a, b) => b.total - a.total);
+  };
 
   const getCategoryBreakdown = () => {
     const breakdown = {};
@@ -910,6 +956,7 @@ function App() {
               formatCurrency={formatCurrency}
               totalAmount={totalAmount}
               getCategoryBreakdown={getCategoryBreakdown}
+              getCategoryBreakdownByFilter={getCategoryBreakdownByFilter}
               user={user}
               authLoading={authLoading}
               onSignInWithGoogle={handleSignInWithGoogle}
