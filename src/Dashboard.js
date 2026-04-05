@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useState, useRef } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, LineChart, Line } from 'recharts';
 import logo from './assets/logo.png';
+import FamilyGroupManager from './FamilyGroupManager';
 
 function Dashboard({
   expenses,
@@ -21,6 +22,12 @@ function Dashboard({
   setExpenseFrequency,
   expenseEndDate,
   setExpenseEndDate,
+  expenseType,
+  setExpenseType,
+  isExpenseSplit,
+  setIsExpenseSplit,
+  expenseSplitMembers,
+  setExpenseSplitMembers,
   darkMode,
   setDarkMode,
   onAddExpense,
@@ -50,6 +57,9 @@ function Dashboard({
   getExpensesByWeek,
   getMonthlyTrendData,
   getMonthlyInsight,
+  getYearlyTotalIncome,
+  getMonthlyIncomeBreakdown,
+  getFilteredExpensesForChartsRange,
   showExpenseForm,
   setShowExpenseForm,
   showIncomeForm,
@@ -62,7 +72,22 @@ function Dashboard({
   formatDate,
   expensesLoading,
   isSubmittingExpense,
-  isSubmittingIncome
+  isSubmittingIncome,
+  userGroup,
+  userRole,
+  onCreateGroup,
+  onJoinGroup,
+  onLeaveGroup,
+  onGenerateCode,
+  groupLoading,
+  showGroupManager,
+  setShowGroupManager,
+  viewingFamilyDashboard,
+  setViewingFamilyDashboard,
+  showRecurringEditScope,
+  setShowRecurringEditScope,
+  recurringEditInstance,
+  onRecurringEditScopeSelect
 }) {
   const navigate = useNavigate();
   const incomeFormRef = useRef(null);
@@ -94,35 +119,18 @@ function Dashboard({
   const [showAllExpensesDrawer, setShowAllExpensesDrawer] = useState(false);
   const [chartFilter, setChartFilter] = useState('current'); // 'current', 'previous', '3months', '6months'
 
-  const CHART_COLORS = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b', '#fa709a', '#30cfd0', '#a8edea'];
-  
-  // GLOBAL FILTER STATE: Calculate filtered expenses once based on chart filter
-  const getFilteredExpensesByDateRange = () => {
-    const today = new Date();
-    let startDate = new Date();
-    let endDate = new Date(today);
-
-    if (chartFilter === 'current') {
-      startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-    } else if (chartFilter === 'previous') {
-      const prevMonth = today.getMonth() === 0 ? 11 : today.getMonth() - 1;
-      const prevYear = today.getMonth() === 0 ? today.getFullYear() - 1 : today.getFullYear();
-      startDate = new Date(prevYear, prevMonth, 1);
-      endDate = new Date(prevYear, prevMonth + 1, 0);
-    } else if (chartFilter === '3months') {
-      startDate = new Date(today.getFullYear(), today.getMonth() - 2, 1);
-    } else if (chartFilter === '6months') {
-      startDate = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+  // Get all expenses for chart filter (regular + recurring instances)
+  const getChartFilteredExpenses = () => {
+    if (!getFilteredExpensesForChartsRange) {
+      return [];
     }
-
-    return expenses.filter((expense) => {
-      const expenseDate = new Date(expense.date);
-      return expenseDate >= startDate && expenseDate <= endDate;
-    });
+    return getFilteredExpensesForChartsRange(chartFilter);
   };
 
+  const CHART_COLORS = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b', '#fa709a', '#30cfd0', '#a8edea'];
+  
   // Single source of truth for filtered expenses - calculated once per render
-  const filteredExpenses = getFilteredExpensesByDateRange();
+  const filteredExpenses = getChartFilteredExpenses();
 
   // Use filtered category breakdown based on selected date range
   const categoryBreakdown = getCategoryBreakdownByFilter(chartFilter);
@@ -326,6 +334,27 @@ function Dashboard({
                         <div className="user-avatar-fallback-small">👤</div>
                       )}
                       <span className="user-name-small">{user.displayName || user.email.split('@')[0]}</span>
+                      {userGroup && (
+                        <span className="group-badge-small">👨‍👩‍👧‍👦</span>
+                      )}
+                      {userGroup && (
+                        <button
+                          className="family-dashboard-btn"
+                          onClick={() => setViewingFamilyDashboard(true)}
+                          title="View family dashboard"
+                          aria-label="View family dashboard"
+                        >
+                          📊
+                        </button>
+                      )}
+                      <button
+                        className="family-btn"
+                        onClick={() => setShowGroupManager(true)}
+                        title="Manage family group"
+                        aria-label="Manage family group"
+                      >
+                        👨‍👩‍👧‍👦
+                      </button>
                       <button
                         className="logout-btn"
                         onClick={onLogout}
@@ -357,7 +386,7 @@ function Dashboard({
             </div>
 
             <div className="header-right">
-              {expenses.length > 0 && (
+              {totalAmount > 0 && (
                 <Link to="/expenses" className="nav-link">
                   View Expenses
                 </Link>
@@ -367,7 +396,7 @@ function Dashboard({
         </div>
 
         <div className="content-wrapper">
-        {(income.length > 0 || expenses.length > 0 || expensesLoading) && (
+        {(totalIncome > 0 || totalAmount > 0 || expensesLoading) && (
           <>
             {expensesLoading && user ? (
               <div className="financial-cards-loading">
@@ -389,7 +418,7 @@ function Dashboard({
               </div>
             ) : (
               <>
-                {(income.length > 0 || expenses.length > 0) && (
+                {(totalIncome > 0 || totalAmount > 0) && (
                   <div className="financial-cards">
                     {income.length > 0 && (
                       <div 
@@ -451,7 +480,10 @@ function Dashboard({
         <div className="action-buttons">
           <button
             className="action-btn expense-action-btn"
-            onClick={() => setShowExpenseForm(!showExpenseForm)}
+            onClick={() => {
+              onCancelEdit();
+              setShowExpenseForm(true);
+            }}
             title="Add a new expense"
             aria-label="Add a new expense"
           >
@@ -460,7 +492,10 @@ function Dashboard({
           </button>
           <button
             className="action-btn income-action-btn"
-            onClick={() => setShowIncomeForm(!showIncomeForm)}
+            onClick={() => {
+              onCancelEdit();
+              setShowIncomeForm(true);
+            }}
             title="Add a new income"
             aria-label="Add a new income"
           >
@@ -471,9 +506,25 @@ function Dashboard({
 
         {income.length > 0 && (
           <div className="income-section">
-            <h3 className="section-title">Total Income</h3>
-            <div className="income-amount">{formatCurrency(totalIncome)}</div>
-            <p className="section-subtitle">{income.length} income entries recorded</p>
+            <div className="yearly-income-summary">
+              <h3 className="section-title">Total Income (Current Year)</h3>
+              <div className="yearly-income-amount">{formatCurrency(getYearlyTotalIncome())}</div>
+              <p className="section-subtitle">{income.length} income entries recorded</p>
+            </div>
+
+            {getMonthlyIncomeBreakdown().length > 0 && (
+              <div className="monthly-income-breakdown">
+                <h4 className="breakdown-title">Monthly Breakdown</h4>
+                <div className="monthly-income-list">
+                  {getMonthlyIncomeBreakdown().map((monthData) => (
+                    <div key={monthData.monthNum} className="monthly-income-item">
+                      <span className="month-name">{monthData.month}</span>
+                      <span className="month-amount">{formatCurrency(monthData.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="income-list">
               {income.map((inc) => (
@@ -507,7 +558,7 @@ function Dashboard({
           </div>
         )}
 
-        {expenses.length > 0 && (
+        {totalAmount > 0 && (
           <div className="dashboard-summary">
             <h3 className="summary-title">Total Expenses</h3>
             <div className="summary-amount">{formatCurrency(totalAmount)}</div>
@@ -520,7 +571,7 @@ function Dashboard({
           </div>
         )}
 
-        {(expenses.length > 0 || expensesLoading) && (getMonthlyTrendData().length > 0 || (expensesLoading && user)) && (
+        {(totalAmount > 0 || expensesLoading) && (getMonthlyTrendData().length > 0 || (expensesLoading && user)) && (
           <div className="monthly-trend-chart">
             <h3 className="chart-title">Monthly Trend (Last 6 Months)</h3>
             
@@ -576,7 +627,7 @@ function Dashboard({
           </div>
         )}
 
-        {((expenses.length > 0 || expensesLoading) && getExpensesByWeek().length > 0) || (expensesLoading && user) ? (
+        {((totalAmount > 0 || expensesLoading) && getExpensesByWeek().length > 0) || (expensesLoading && user) ? (
           <div className="weekly-expenses-chart">
             <h3 className="chart-title">Weekly Expenses - {getMonthName()}</h3>
             
@@ -657,7 +708,7 @@ function Dashboard({
         ) : null}
 
         {/* Chart Filter */}
-        {expenses.length > 0 && (
+        {totalAmount > 0 && (
           <div className="chart-filter-section">
             <div className="filter-controls">
               <label htmlFor="chart-filter" className="filter-label">Filter Charts:</label>
@@ -680,7 +731,7 @@ function Dashboard({
           </div>
         )}
 
-        {expenses.length > 0 && categoryBreakdown.length > 0 && (
+        {categoryBreakdown.length > 0 && (
           <div className="category-breakdown">
             <h3 className="breakdown-title">Category Breakdown</h3>
             
@@ -725,7 +776,7 @@ function Dashboard({
           </div>
         )}
 
-        {expenses.length > 0 && (
+        {totalAmount > 0 && (
           <div className="insights-section">
             <h3 className="insights-title">📊 Your Insights</h3>
             <div className="insights-grid">
@@ -742,7 +793,7 @@ function Dashboard({
                 </div>
               )}
 
-              {expenses.length > 0 && (
+              {totalAmount > 0 && (
                 <div className="insight-card">
                   <div className="insight-icon">📅</div>
                   <div className="insight-content">
@@ -893,6 +944,12 @@ function Dashboard({
                           <div className="item-header">
                             <div className="item-category">
                               {expense.category}
+                              {expense.type === 'shared' && (
+                                <span className="expense-type-badge shared">👥 Shared</span>
+                              )}
+                              {expense.type === 'personal' && (
+                                <span className="expense-type-badge personal">🔒 Personal</span>
+                              )}
                             </div>
                             <div className="item-amount">
                               {formatCurrency(expense.amount)}
@@ -927,7 +984,7 @@ function Dashboard({
           <div className="drawer-overlay" onClick={closeAllExpensesDrawer}></div>
           <div className="week-drawer all-expenses-drawer">
             <div className="drawer-header">
-              <h3 className="drawer-title">All Expenses - {getMonthName()}</h3>
+              <h3 className="drawer-title">All Expenses - {getFilterLabel()}</h3>
               <button 
                 className="drawer-close-btn" 
                 onClick={closeAllExpensesDrawer}
@@ -939,45 +996,64 @@ function Dashboard({
             </div>
 
             <div className="drawer-content">
-              {expenses && expenses.length > 0 ? (
+              {getChartFilteredExpenses().length > 0 ? (
                 <>
-                  <div className="drawer-summary">
-                    <div className="summary-row">
-                      <span className="summary-label">Total Expenses:</span>
-                      <span className="summary-value">{formatCurrency(getFilteredTotal())}</span>
-                    </div>
-                    <div className="summary-row">
-                      <span className="summary-label">Number of Expenses:</span>
-                      <span className="summary-value">{expenses.length}</span>
-                    </div>
-                    <div className="summary-row">
-                      <span className="summary-label">Average per Expense:</span>
-                      <span className="summary-value">{formatCurrency(expenses.length > 0 ? getFilteredTotal() / expenses.length : 0)}</span>
-                    </div>
-                  </div>
+                  {(() => {
+                    const filteredExpenses = getChartFilteredExpenses();
+                    const totalAmount = filteredExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+                    const avgAmount = filteredExpenses.length > 0 ? totalAmount / filteredExpenses.length : 0;
+                    
+                    return (
+                      <>
+                        <div className="drawer-summary">
+                          <div className="summary-row">
+                            <span className="summary-label">Total Expenses:</span>
+                            <span className="summary-value">{formatCurrency(totalAmount)}</span>
+                          </div>
+                          <div className="summary-row">
+                            <span className="summary-label">Number of Expenses:</span>
+                            <span className="summary-value">{filteredExpenses.length}</span>
+                          </div>
+                          <div className="summary-row">
+                            <span className="summary-label">Average per Expense:</span>
+                            <span className="summary-value">{formatCurrency(avgAmount)}</span>
+                          </div>
+                        </div>
 
-                  <div className="drawer-expenses-list">
-                    {expenses.map((expense) => (
-                      <div key={expense.id} className="drawer-expense-item">
-                        <div className="item-header">
-                          <div className="item-category">
-                            {expense.category}
-                          </div>
-                          <div className="item-amount">
-                            {formatCurrency(expense.amount)}
-                          </div>
+                        <div className="drawer-expenses-list">
+                          {filteredExpenses.map((expense) => (
+                            <div key={expense.id} className="drawer-expense-item">
+                              <div className="item-header">
+                                <div className="item-category">
+                                  {expense.category}
+                                  {expense.type === 'shared' && (
+                                    <span className="expense-type-badge shared">👥 Shared</span>
+                                  )}
+                                  {expense.type === 'personal' && (
+                                    <span className="expense-type-badge personal">🔒 Personal</span>
+                                  )}
+                                  {expense.isGenerated && (
+                                    <span className="expense-type-badge recurring">🔄 Recurring</span>
+                                  )}
+                                </div>
+                                <div className="item-amount">
+                                  {formatCurrency(expense.amount)}
+                                </div>
+                              </div>
+                              {expense.description && (
+                                <div className="item-description">
+                                  {expense.description}
+                                </div>
+                              )}
+                              <div className="item-date">
+                                {formatDate(expense.date)}
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                        {expense.description && (
-                          <div className="item-description">
-                            {expense.description}
-                          </div>
-                        )}
-                        <div className="item-date">
-                          {formatDate(expense.date)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      </>
+                    );
+                  })()}
                 </>
               ) : (
                 <div className="drawer-empty">
@@ -995,6 +1071,7 @@ function Dashboard({
             <div 
               className="form-modal-backdrop"
               onClick={() => {
+                onCancelEdit();
                 setShowExpenseForm(false);
                 setShowIncomeForm(false);
               }}
@@ -1004,11 +1081,29 @@ function Dashboard({
               {showExpenseForm && (
                 <form className="form-modal-content expense-form" onSubmit={handleAddExpenseWithClose}>
                   <div className="form-header">
-                    <h2 className="form-title">Add Expense</h2>
+                    <div className="form-title-section">
+                      <h2 className="form-title">
+                        {editingExpenseId ? '✏️ Edit Expense' : '➕ Add Expense'}
+                      </h2>
+                      {editingExpenseId && (
+                        <p className="form-subtitle">
+                          {editingExpenseId.startsWith('override-')
+                            ? '📅 Editing only this occurrence (The recurring series continues)'
+                            : editingExpenseId.startsWith('split-')
+                            ? '🔜 Editing this and all future occurrences (A new recurring rule will be created)'
+                            : isExpenseRecurring
+                            ? '🔄 Updates will apply to all occurrences in this recurring series'
+                            : '✓ This expense will be updated'}
+                        </p>
+                      )}
+                    </div>
                     <button
                       type="button"
                       className="form-close-btn"
-                      onClick={() => setShowExpenseForm(false)}
+                      onClick={() => {
+                        onCancelEdit();
+                        setShowExpenseForm(false);
+                      }}
                       title="Close expense form"
                       aria-label="Close expense form"
                     >
@@ -1077,23 +1172,13 @@ function Dashboard({
                       </button>
                       <button
                         type="button"
-                        className={`quick-btn ${category === 'Travel' ? 'active' : ''}`}
+                        className={`quick-btn ${category === 'Groceries' ? 'active' : ''}`}
                         onClick={() => {
-                          setCategory('Travel');
+                          setCategory('Groceries');
                           if (error) setError('');
                         }}
                       >
-                        ✈️ Travel
-                      </button>
-                      <button
-                        type="button"
-                        className={`quick-btn ${category === 'Rent' ? 'active' : ''}`}
-                        onClick={() => {
-                          setCategory('Rent');
-                          if (error) setError('');
-                        }}
-                      >
-                        🏠 Rent
+                        🛒 Groceries
                       </button>
                       <button
                         type="button"
@@ -1104,6 +1189,16 @@ function Dashboard({
                         }}
                       >
                         ⚕️ Medical
+                      </button>
+                      <button
+                        type="button"
+                        className={`quick-btn ${category === 'EMI' ? 'active' : ''}`}
+                        onClick={() => {
+                          setCategory('EMI');
+                          if (error) setError('');
+                        }}
+                      >
+                        💳 EMI
                       </button>
                     </div>
                     <select
@@ -1124,6 +1219,7 @@ function Dashboard({
                       <option value="Entertainment">Entertainment</option>
                       <option value="Vehicle">Vehicle</option>
                       <option value="Medical">Medical</option>
+                      <option value="EMI">EMI</option>
                       <option value="Others">Others</option>
                     </select>
                   </div>
@@ -1139,6 +1235,62 @@ function Dashboard({
                       className="expense-textarea"
                     />
                   </div>
+
+                  {userGroup && (
+                    <div className="form-group">
+                      <label htmlFor="expense-type">Expense Type</label>
+                      <select
+                        id="expense-type"
+                        value={expenseType}
+                        onChange={(e) => setExpenseType(e.target.value)}
+                      >
+                        <option value="personal">🔒 Personal (Only you can see)</option>
+                        <option value="shared">👥 Shared (Family can see)</option>
+                      </select>
+                      <small className="field-hint">Shared expenses appear in the family dashboard</small>
+                    </div>
+                  )}
+
+                  {userGroup && expenseType === 'shared' && (
+                    <div className="form-group toggle-group">
+                      <label htmlFor="expense-split-toggle">
+                        <input
+                          id="expense-split-toggle"
+                          type="checkbox"
+                          checked={isExpenseSplit}
+                          onChange={(e) => setIsExpenseSplit(e.target.checked)}
+                        />
+                        <span className="toggle-label">Split this expense with others</span>
+                      </label>
+                    </div>
+                  )}
+
+                  {userGroup && expenseType === 'shared' && isExpenseSplit && (
+                    <div className="form-group">
+                      <label htmlFor="split-members">Who to split with?</label>
+                      <div className="split-members-list">
+                        {userGroup.members && userGroup.members
+                          .filter(m => m.userId !== user?.uid)
+                          .map(member => (
+                            <label key={member.userId} className="split-member-checkbox">
+                              <input
+                                type="checkbox"
+                                checked={expenseSplitMembers.includes(member.userId)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setExpenseSplitMembers([...expenseSplitMembers, member.userId]);
+                                  } else {
+                                    setExpenseSplitMembers(expenseSplitMembers.filter(id => id !== member.userId));
+                                  }
+                                }}
+                              />
+                              <span>{member.name}</span>
+                            </label>
+                          ))}
+                      </div>
+                      <small className="field-hint">Selected members will each owe 1/{(expenseSplitMembers.length + 1)} of the amount</small>
+                    </div>
+                  )}
 
                   <div className="form-group toggle-group">
                     <label htmlFor="expense-recurring-toggle">
@@ -1192,7 +1344,14 @@ function Dashboard({
                       )}
                     </button>
                     {editingExpenseId && (
-                      <button type="button" className="cancel-btn" onClick={onCancelEdit}>
+                      <button 
+                        type="button" 
+                        className="cancel-btn" 
+                        onClick={() => {
+                          onCancelEdit();
+                          setShowExpenseForm(false);
+                        }}
+                      >
                         ✕ Cancel
                       </button>
                     )}
@@ -1207,7 +1366,10 @@ function Dashboard({
                     <button
                       type="button"
                       className="form-close-btn"
-                      onClick={() => setShowIncomeForm(false)}
+                      onClick={() => {
+                        onCancelEdit();
+                        setShowIncomeForm(false);
+                      }}
                       title="Close income form"
                       aria-label="Close income form"
                     >
@@ -1280,7 +1442,14 @@ function Dashboard({
                       )}
                     </button>
                     {editingIncomeId && (
-                      <button type="button" className="cancel-btn" onClick={onCancelEdit}>
+                      <button 
+                        type="button" 
+                        className="cancel-btn" 
+                        onClick={() => {
+                          onCancelEdit();
+                          setShowIncomeForm(false);
+                        }}
+                      >
                         ✕ Cancel
                       </button>
                     )}
@@ -1290,6 +1459,96 @@ function Dashboard({
             </div>
           </>
         )}
+
+        {/* Recurring Edit Scope Modal */}
+        {showRecurringEditScope && recurringEditInstance && (
+          <>
+            <div 
+              className="form-modal-backdrop"
+              onClick={() => setShowRecurringEditScope(false)}
+              aria-hidden="true"
+            />
+            <div className="form-modal-wrapper">
+              <div className="form-modal-content recurring-scope-modal">
+                <div className="form-header">
+                  <h2 className="form-title">Edit Recurring Expense</h2>
+                  <button
+                    type="button"
+                    className="form-close-btn"
+                    onClick={() => setShowRecurringEditScope(false)}
+                    title="Close dialog"
+                    aria-label="Close dialog"
+                  >
+                    ✕
+                  </button>
+                </div>
+                
+                <p className="scope-modal-message">
+                  Which occurrences would you like to edit?
+                </p>
+                
+                <div className="scope-options-list">
+                  <button
+                    type="button"
+                    className="scope-option-btn"
+                    onClick={() => onRecurringEditScopeSelect('this')}
+                  >
+                    <div className="scope-option-icon">📅</div>
+                    <div className="scope-option-content">
+                      <div className="scope-option-title">Edit Only This Occurrence</div>
+                      <div className="scope-option-desc">
+                        Modify only this instance ({recurringEditInstance.date})
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="scope-option-btn"
+                    onClick={() => onRecurringEditScopeSelect('future')}
+                  >
+                    <div className="scope-option-icon">🔜</div>
+                    <div className="scope-option-content">
+                      <div className="scope-option-title">Edit This & Future Occurrences</div>
+                      <div className="scope-option-desc">
+                        Create a new recurring rule from {recurringEditInstance.date} onwards
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="scope-option-btn"
+                    onClick={() => onRecurringEditScopeSelect('all')}
+                  >
+                    <div className="scope-option-icon">🔄</div>
+                    <div className="scope-option-content">
+                      <div className="scope-option-title">Edit Entire Series</div>
+                      <div className="scope-option-desc">
+                        Update all past and future occurrences
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+        
+        {/* Family Group Manager Modal */}
+        <FamilyGroupManager
+          user={user}
+          userGroup={userGroup}
+          userRole={userRole}
+          onCreateGroup={onCreateGroup}
+          onJoinGroup={onJoinGroup}
+          onLeaveGroup={onLeaveGroup}
+          onGenerateCode={onGenerateCode}
+          groupLoading={groupLoading}
+          showManager={showGroupManager}
+          setShowManager={setShowGroupManager}
+          darkMode={darkMode}
+        />
       </div>
     </div>
   );

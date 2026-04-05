@@ -1,6 +1,102 @@
+/**
+ * Firebase Configuration & Firestore Database API
+ * 
+ * FIRESTORE SCHEMA OVERVIEW:
+ * ══════════════════════════════════════════════════════════════════════════════
+ * 
+ * Collections Structure:
+ * ┌─────────────────────────────────────────────────────────────────────────────┐
+ * │ /users/{userId}                                   [Root Collection]         │
+ * │   ├── uid: string (matches Firebase Auth UID)                               │
+ * │   ├── email: string                                                          │
+ * │   ├── name: string                                                           │
+ * │   ├── photoURL: string (optional)                                            │
+ * │   ├── groupId: string (optional, null if not in family group)                │
+ * │   ├── role: string ('admin' | 'member' | null)                              │
+ * │   ├── darkMode: boolean                                                      │
+ * │   ├── createdAt: timestamp                                                   │
+ * │   ├── updatedAt: timestamp                                                   │
+ * │   │                                                                           │
+ * │   ├─ /expenses/{expenseId}           [Subcollection - User Expenses]        │
+ * │   │   ├── amount: number                                                     │
+ * │   │   ├── category: string                                                   │
+ * │   │   ├── date: string (ISO format: YYYY-MM-DD)                             │
+ * │   │   ├── description: string (optional)                                     │
+ * │   │   ├── type: string ('personal' | 'shared')                              │
+ * │   │   ├── isSplit: boolean                                                   │
+ * │   │   ├── splitMembers: string[] (array of userIds to split with)            │
+ * │   │   ├── isRecurring: boolean                                               │
+ * │   │   ├── frequency: string ('daily' | 'weekly' | 'monthly' | 'yearly')      │
+ * │   │   ├── endDate: string (optional, ISO format)                             │
+ * │   │   ├── createdAt: timestamp                                               │
+ * │   │   └── updatedAt: timestamp                                               │
+ * │   │                                                                           │
+ * │   └─ /income/{incomeId}              [Subcollection - User Income]          │
+ * │       ├── amount: number                                                     │
+ * │       ├── source: string                                                     │
+ * │       ├── date: string (ISO format: YYYY-MM-DD)                             │
+ * │       ├── description: string (optional)                                     │
+ * │       ├── isRecurring: boolean                                               │
+ * │       ├── frequency: string (optional)                                       │
+ * │       ├── endDate: string (optional)                                         │
+ * │       ├── createdAt: timestamp                                               │
+ * │       └── updatedAt: timestamp                                               │
+ * │                                                                               │
+ * └─────────────────────────────────────────────────────────────────────────────┘
+ * 
+ * ┌─────────────────────────────────────────────────────────────────────────────┐
+ * │ /familyGroups/{groupId}                          [Root Collection]         │
+ * │   ├── name: string                                                           │
+ * │   ├── adminId: string (userId of group admin)                                │
+ * │   ├── adminName: string                                                      │
+ * │   ├── members: [                  [Array of group members]                  │
+ * │   │   { userId, name, role ('admin'|'member'), joinedAt }                   │
+ * │   │ ]                                                                        │
+ * │   ├── inviteCodes: [               [Array of invite codes]                  │
+ * │   │   { code, createdAt, createdBy, usedCount }                             │
+ * │   │ ]                                                                        │
+ * │   ├── isActive: boolean                                                      │
+ * │   ├── createdAt: timestamp                                                   │
+ * │   └── updatedAt: timestamp                                                   │
+ * └─────────────────────────────────────────────────────────────────────────────┘
+ * 
+ * QUERY PATTERNS:
+ * ──────────────
+ * 1. Get user's expenses (ordered by date):
+ *    collection(db, 'users', userId, 'expenses') → orderBy('date', 'desc')
+ * 
+ * 2. Get shared expenses only:
+ *    collection(db, 'users', userId, 'expenses') → where('type', '==', 'shared')
+ * 
+ * 3. Get group details:
+ *    doc(db, 'familyGroups', groupId)
+ * 
+ * 4. Get user's group:
+ *    First fetch user profile (getDoc), then use groupId to fetch group
+ * 
+ * 5. Find group by invite code:
+ *    getDocs(collection(db, 'familyGroups')) → filter by inviteCode (client-side)
+ *    Note: For scalability, consider separate inviteCodes collection if > 10K groups
+ * 
+ * SECURITY NOTES:
+ * ───────────────
+ * - Users can only read/write their own profile and expenses
+ * - Shared expenses require groupId validation
+ * - Only group admin can modify group settings
+ * - Use Firestore Security Rules to enforce access control
+ * 
+ * INDEXES REQUIRED:
+ * ─────────────────
+ * - users/{uid}/expenses: date (DESC), category, type
+ * - users/{uid}/income: date (DESC)
+ * - Composite: expenses (date DESC + type ASC)
+ * 
+ * ══════════════════════════════════════════════════════════════════════════════
+ */
+
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc, serverTimestamp, getDoc, setDoc } from 'firebase/firestore';
 
 // Firebase configuration
 // Replace these values with your Firebase project credentials
@@ -26,9 +122,88 @@ export const db = getFirestore(app);
 // Export Google Auth Provider for sign-in
 export const googleProvider = new GoogleAuthProvider();
 
+// ══════════════════════════════════════════════════════════════════════════════
+// USER PROFILE API
+// ══════════════════════════════════════════════════════════════════════════════
+// Creates or updates user profile in Firestore
+
+export const usersAPI = {
+  // Create or update user profile
+  // Called when user signs in for the first time or on subsequent logins
+  // @param userId - Firebase Auth UID
+  // @param userData - Object with email, displayName, photoURL
+  // @returns Promise<Object> - User document
+  createOrUpdateProfile: async (userId, userData) => {
+    try {
+      const userRef = doc(db, 'users', userId);
+      
+      // Check if user exists
+      const userSnap = await getDoc(userRef);
+      
+      if (userSnap.exists()) {
+        // User exists, just update if needed
+        await updateDoc(userRef, {
+          updatedAt: serverTimestamp()
+        });
+        return { id: userSnap.id, ...userSnap.data() };
+      } else {
+        // New user, create profile
+        const newUserData = {
+          uid: userId,
+          email: userData.email || '',
+          name: userData.displayName || 'User',
+          photoURL: userData.photoURL || '',
+          groupId: null,
+          role: null,
+          darkMode: false,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        };
+        
+        await setDoc(userRef, newUserData);
+        return { id: userId, ...newUserData };
+      }
+    } catch (error) {
+      console.error('Error creating/updating user profile:', error);
+      throw error;
+    }
+  }
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// EXPENSES API
+// ══════════════════════════════════════════════════════════════════════════════
+// Manages user expenses stored in /users/{userId}/expenses subcollection
+// 
+// Expense Document Structure:
+// {
+//   amount: number (required, > 0)
+//   category: string (required, e.g., "Groceries", "Entertainment")
+//   date: string (required, ISO format: "YYYY-MM-DD", not in future)
+//   description: string (optional)
+//   type: string (required, enum: "personal" | "shared")
+//   isSplit: boolean (required, true only if type='shared')
+//   splitMembers: string[] (array of userIds, empty if not split)
+//   isRecurring: boolean (required)
+//   frequency: string (optional, if isRecurring is true)
+//   endDate: string (optional, ISO format)
+//   createdAt: timestamp (auto-set)
+//   updatedAt: timestamp (auto-set)
+// }
+// 
+// Common Queries:
+// - All expenses: getDocs(collection(db, 'users', userId, 'expenses'))
+// - By date range: where('date', '>=', '2026-04-01').where('date', '<=', '2026-04-30')
+// - Shared only: where('type', '==', 'shared')
+// - By category: where('category', '==', 'Groceries')
+// ══════════════════════════════════════════════════════════════════════════════
+
 // Firestore utility functions for expenses
 export const expensesAPI = {
   // Add a new expense
+  // @param userId - Firebase Auth UID
+  // @param expenseData - Object with amount, category, date, description, type, isSplit, splitMembers, etc.
+  // @returns Promise<Object> - Created expense with ID
   addExpense: async (userId, expenseData) => {
     try {
       const userExpensesRef = collection(db, 'users', userId, 'expenses');
@@ -81,6 +256,94 @@ export const expensesAPI = {
       return { id: expenseId, ...expenseData };
     } catch (error) {
       console.error('Error updating expense:', error);
+      throw error;
+    }
+  },
+
+  // Add a shared expense to multiple members' collections
+  // @param creatorUserId - UID of the user creating the expense
+  // @param memberUserIds - Array of all group member UIDs (including creator)
+  // @param expenseData - Object with amount, category, date, description, type, isSplit, splitMembers, etc.
+  // @returns Promise<Object> - Created expense with ID
+  addSharedExpense: async (creatorUserId, memberUserIds, expenseData) => {
+    try {
+      // First, add to creator's collection
+      const creatorExpensesRef = collection(db, 'users', creatorUserId, 'expenses');
+      const docRef = await addDoc(creatorExpensesRef, {
+        ...expenseData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      const expenseId = docRef.id;
+      const savedExpense = { id: expenseId, ...expenseData };
+
+      // Then, add to all other members' collections
+      const otherMembers = memberUserIds.filter(id => id !== creatorUserId);
+      for (const memberId of otherMembers) {
+        try {
+          const memberExpensesRef = collection(db, 'users', memberId, 'expenses');
+          await addDoc(memberExpensesRef, {
+            ...expenseData,
+            id: expenseId, // Use same ID for consistency
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        } catch (error) {
+          console.warn(`Failed to add shared expense to member ${memberId}:`, error);
+          // Continue with other members even if one fails
+        }
+      }
+
+      return savedExpense;
+    } catch (error) {
+      console.error('Error adding shared expense:', error);
+      throw error;
+    }
+  },
+
+  // Update a shared expense across all members' collections
+  // @param memberUserIds - Array of all group member UIDs
+  // @param expenseId - ID of the expense to update
+  // @param expenseData - Updated expense data
+  updateSharedExpense: async (memberUserIds, expenseId, expenseData) => {
+    try {
+      // Update expense for each member
+      for (const memberId of memberUserIds) {
+        try {
+          const expenseRef = doc(db, 'users', memberId, 'expenses', expenseId);
+          await updateDoc(expenseRef, {
+            ...expenseData,
+            updatedAt: serverTimestamp(),
+          });
+        } catch (error) {
+          console.warn(`Failed to update shared expense for member ${memberId}:`, error);
+          // Continue with other members even if one fails
+        }
+      }
+      return { id: expenseId, ...expenseData };
+    } catch (error) {
+      console.error('Error updating shared expense:', error);
+      throw error;
+    }
+  },
+
+  // Delete a shared expense from all members' collections
+  // @param memberUserIds - Array of all group member UIDs
+  // @param expenseId - ID of the expense to delete
+  deleteSharedExpense: async (memberUserIds, expenseId) => {
+    try {
+      // Delete expense for each member
+      for (const memberId of memberUserIds) {
+        try {
+          const expenseRef = doc(db, 'users', memberId, 'expenses', expenseId);
+          await deleteDoc(expenseRef);
+        } catch (error) {
+          console.warn(`Failed to delete shared expense for member ${memberId}:`, error);
+          // Continue with other members even if one fails
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting shared expense:', error);
       throw error;
     }
   },
@@ -146,9 +409,37 @@ export const recurringExpensesAPI = {
   },
 };
 
+// ══════════════════════════════════════════════════════════════════════════════
+// INCOME API
+// ══════════════════════════════════════════════════════════════════════════════
+// Manages user income stored in /users/{userId}/income subcollection
+// Income is PRIVATE - not shared across family groups
+// 
+// Income Document Structure:
+// {
+//   amount: number (required, > 0)
+//   source: string (required, e.g., "Salary", "Bonus", "Investment")
+//   date: string (required, ISO format: "YYYY-MM-DD")
+//   description: string (optional)
+//   isRecurring: boolean (required)
+//   frequency: string (optional, if isRecurring is true)
+//   endDate: string (optional, ISO format)
+//   createdAt: timestamp (auto-set)
+//   updatedAt: timestamp (auto-set)
+// }
+// 
+// Common Queries:
+// - All income: getDocs(collection(db, 'users', userId, 'income'))
+// - By date range: where('date', '>=', '2026-04-01')
+// - By source: where('source', '==', 'Salary')
+// ══════════════════════════════════════════════════════════════════════════════
+
 // Firestore utility functions for income
 export const incomeAPI = {
   // Add a new income entry
+  // @param userId - Firebase Auth UID
+  // @param incomeData - Object with amount, source, date, description, isRecurring, etc.
+  // @returns Promise<Object> - Created income with ID
   addIncome: async (userId, incomeData) => {
     try {
       const userIncomeRef = collection(db, 'users', userId, 'income');
@@ -204,6 +495,494 @@ export const incomeAPI = {
       throw error;
     }
   },
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FAMILY GROUPS API
+// ══════════════════════════════════════════════════════════════════════════════
+// Manages family groups and group membership. Enables multi-user collaboration.
+// 
+// Family Group Document Structure:
+// {
+//   name: string (group name, e.g., "The Smiths")
+//   adminId: string (userId of the admin)
+//   adminName: string (name of admin for display)
+//   members: [                 // Array of group members
+//     {
+//       userId: string,
+//       name: string,
+//       role: string ('admin' | 'member'),
+//       joinedAt: timestamp
+//     }
+//   ]
+//   inviteCodes: [             // Array of invite codes for joining
+//     {
+//       code: string (6-char uppercase, e.g., "ABC123"),
+//       createdAt: timestamp,
+//       createdBy: string (userId),
+//       usedCount: number (how many users joined with this code)
+//     }
+//   ]
+//   isActive: boolean (default true)
+//   createdAt: timestamp (auto-set)
+//   updatedAt: timestamp (auto-set)
+// }
+// 
+// User Profile Updates:
+// When user creates or joins a group, their /users/{userId} document is updated:
+// {
+//   groupId: string (family group ID)
+//   role: string ('admin' | 'member')
+// }
+// 
+// Workflow:
+// 1. User A creates group → new familyGroups doc, invite code generated, admin added to members
+// 2. User B joins with code → added to members array, groupId set in their profile
+// 3. User B can see expenses where type='shared' from group members
+// 4. Admin can generate new codes, remove members, change roles
+// 
+// Shared Expenses:
+// Expenses with type='shared' are visible to all group members with role='member'
+// Shared expenses can have isSplit=true to track who owes whom
+// Settlement summary calculated based on split expenses
+// 
+// Query Patterns:
+// - Get group: getDoc(doc(db, 'familyGroups', groupId))
+// - Find by code: getDocs + filter client-side (see getGroupByCode for details)
+// - Get user's group: After fetching user doc, use groupId to fetch group
+// - Get all group members: Access members array from group document
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Firestore utility functions for family groups
+export const familyGroupsAPI = {
+  // Generate a random 6-character invite code
+  // Format: Uppercase alphanumeric string (e.g., "ABC123")
+  // @returns string - Random 6-char code
+  generateInviteCode: () => {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  },
+
+  // Create a new family group
+  // Creates a new group document, generates initial invite code, and adds creator as admin
+  // Also updates user's profile with groupId and role='admin'
+  // 
+  // @param userId - Firebase Auth UID of group creator
+  // @param userName - Display name of creator
+  // @param groupName - Name of the family group (e.g., "The Johnsons")
+  // @returns Promise<Object> - { id, name, adminId, inviteCode, members }
+  // 
+  // Side effects:
+  // - Creates /familyGroups/{groupId} document
+  // - Updates /users/{userId} to set groupId and role='admin'
+  // 
+  // Example:
+  //   createGroup('user123', 'John Doe', 'The Johnsons')
+  //   → Returns: { id: 'grp456', name: 'The Johnsons', inviteCode: 'ABC123', ... }
+  createGroup: async function(userId, userName, groupName) {
+    try {
+      const inviteCode = this.generateInviteCode();
+      const groupsRef = collection(db, 'familyGroups');
+      const now = new Date().toISOString();
+      const docRef = await addDoc(groupsRef, {
+        name: groupName,
+        adminId: userId,
+        adminName: userName,
+        members: [{
+          userId,
+          name: userName,
+          role: 'admin',
+          joinedAt: now
+        }],
+        inviteCodes: [{
+          code: inviteCode,
+          createdAt: now,
+          createdBy: userId,
+          usedCount: 0
+        }],
+        isActive: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+
+      // Update user profile with groupId and role
+      await updateDoc(doc(db, 'users', userId), {
+        groupId: docRef.id,
+        role: 'admin',
+        updatedAt: serverTimestamp()
+      });
+
+      return {
+        id: docRef.id,
+        name: groupName,
+        adminId: userId,
+        adminName: userName,
+        members: [{
+          userId,
+          name: userName,
+          role: 'admin',
+          joinedAt: new Date().toISOString()
+        }],
+        inviteCodes: [{
+          code: inviteCode,
+          createdAt: new Date().toISOString(),
+          createdBy: userId,
+          usedCount: 0
+        }],
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Error creating family group:', error);
+      throw error;
+    }
+  },
+
+  // Get group by invite code
+  // Finds the family group that has the given invite code
+  // Note: Since Firestore doesn't support complex array queries, this fetches all groups
+  // and filters on the client. For apps with > 10K groups, consider:
+  // - Separate /inviteCodes collection indexed by code
+  // - Redis cache of active codes
+  // 
+  // @param inviteCode - The 6-character invite code (e.g., "ABC123")
+  // @returns Promise<Object> - Group document with id and all fields, or undefined if not found
+  // 
+  // Performance: O(n) where n = number of groups. Acceptable for < 10K groups.
+  // 
+  // Example:
+  //   getGroupByCode('ABC123')
+  //   → Returns: { id: 'grp456', name: 'The Johnsons', members: [...], ... }
+  getGroupByCode: async function(inviteCode) {
+    try {
+      const groupsRef = collection(db, 'familyGroups');
+      // Note: Firebase doesn't support complex array queries, so we'll get all and filter
+      const snapshot = await getDocs(groupsRef);
+      const docs = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      return docs.find(group => 
+        group.inviteCodes && group.inviteCodes.some(ic => ic.code === inviteCode)
+      );
+    } catch (error) {
+      console.error('Error getting group by code:', error);
+      throw error;
+    }
+  },
+
+  // Join a family group
+  // Adds the user to an existing family group using an invite code
+  // Updates user's profile with groupId and role='member'
+  // Increments the inviteCode's usedCount
+  // 
+  // @param userId - Firebase Auth UID
+  // @param userName - Display name of joining user
+  // @param inviteCode - The 6-character invite code
+  // @returns Promise<Object> - { id, name, role, members }
+  // @throws Error if code is invalid, user already in group, or group not found
+  // 
+  // Side effects:
+  // - Adds user to familyGroups/{groupId}.members array
+  // - Updates inviteCodes array to increment usedCount
+  // - Updates /users/{userId} to set groupId and role='member'
+  // 
+  // Example:
+  //   joinGroup('user789', 'Jane Doe', 'ABC123')
+  //   → Returns: { id: 'grp456', name: 'The Johnsons', role: 'member', members: 3 }
+  joinGroup: async function(userId, userName, inviteCode) {
+    try {
+      const group = await this.getGroupByCode(inviteCode);
+      if (!group) {
+        throw new Error('Invalid invite code');
+      }
+
+      // Check if user is already a member
+      if (group.members.some(m => m.userId === userId)) {
+        throw new Error('You are already a member of this group');
+      }
+
+      // Add user to group members
+      const now = new Date().toISOString();
+      const updatedMembers = [...group.members, {
+        userId,
+        name: userName,
+        role: 'member',
+        joinedAt: now
+      }];
+
+      // Update invite code usage
+      const updatedCodes = group.inviteCodes.map(ic => 
+        ic.code === inviteCode 
+          ? { ...ic, usedCount: (ic.usedCount || 0) + 1, lastUsedAt: new Date().toISOString() }
+          : ic
+      );
+
+      await updateDoc(doc(db, 'familyGroups', group.id), {
+        members: updatedMembers,
+        inviteCodes: updatedCodes,
+        updatedAt: serverTimestamp()
+      });
+
+      // Update user profile with groupId and role
+      await updateDoc(doc(db, 'users', userId), {
+        groupId: group.id,
+        role: 'member',
+        updatedAt: serverTimestamp()
+      });
+
+      return {
+        id: group.id,
+        name: group.name,
+        adminId: group.adminId,
+        adminName: group.adminName,
+        members: updatedMembers,
+        inviteCodes: updatedCodes,
+        isActive: group.isActive,
+        createdAt: group.createdAt,
+        updatedAt: group.updatedAt
+      };
+    } catch (error) {
+      console.error('Error joining group:', error);
+      throw error;
+    }
+  },
+
+  // Get group details
+  // Retrieves a single family group document by ID
+  // 
+  // @param groupId - The family group document ID
+  // @returns Promise<Object> - Group document with id, name, members, inviteCodes, etc.
+  // @throws Error if group not found
+  // 
+  // Usage: Called after user logs in to load their group data
+  //   getGroup(user.groupId) → Load group members, invite codes, etc.
+  // 
+  // Example:
+  //   getGroup('grp456')
+  //   → Returns: { id: 'grp456', name: 'The Johnsons', members: [...], inviteCodes: [...] }
+  getGroup: async function(groupId) {
+    try {
+      const groupRef = doc(db, 'familyGroups', groupId);
+      const snapshot = await getDoc(groupRef);
+      if (!snapshot.exists()) {
+        throw new Error('Group not found');
+      }
+      return {
+        id: snapshot.id,
+        ...snapshot.data()
+      };
+    } catch (error) {
+      console.error('Error getting group:', error);
+      throw error;
+    }
+  },
+
+  // Generate new invite code (Admin Only)
+  // Creates a new invite code for the group. Used when admin wants to share
+  // a new code with family members instead of reusing the original.
+  // 
+  // @param groupId - The family group ID
+  // @param userId - Firebase Auth UID (must be group admin)
+  // @returns Promise<string> - New 6-character invite code
+  // @throws Error if user is not admin
+  // 
+  // Security: Only group admin can generate new codes
+  // 
+  // Example:
+  //   generateNewCode('grp456', 'user123')  // user123 must be admin
+  //   → Returns: 'XYZ789'
+  generateNewCode: async function(groupId, userId) {
+    try {
+      const group = await this.getGroup(groupId);
+      
+      // Check if user is admin
+      if (group.adminId !== userId) {
+        throw new Error('Only admin can generate new codes');
+      }
+
+      const newCode = this.generateInviteCode();
+      const updatedCodes = [...(group.inviteCodes || []), {
+        code: newCode,
+        createdAt: new Date().toISOString(),
+        createdBy: userId,
+        usedCount: 0
+      }];
+
+      await updateDoc(doc(db, 'familyGroups', groupId), {
+        inviteCodes: updatedCodes,
+        updatedAt: serverTimestamp()
+      });
+
+      return newCode;
+    } catch (error) {
+      console.error('Error generating new code:', error);
+      throw error;
+    }
+  },
+
+  // Leave group
+  // Removes user from the family group. User's expenses are preserved but marked
+  // as personal. User can no longer see shared family expenses.
+  // 
+  // Restriction: Admin cannot leave the group. They must transfer admin role
+  // to another member first, then leave (or have another admin remove them).
+  // 
+  // @param userId - Firebase Auth UID
+  // @param groupId - The family group ID
+  // @returns Promise<boolean> - true on success
+  // @throws Error if user is admin or group not found
+  // 
+  // Side effects:
+  // - Removes user from familyGroups/{groupId}.members array
+  // - Clears groupId and role from /users/{userId} profile
+  // - User's existing expenses remain but become inaccessible to others
+  // 
+  // Example:
+  //   leaveGroup('user789', 'grp456')
+  //   → User removed from group, can no longer see shared expenses
+  leaveGroup: async function(userId, groupId) {
+    try {
+      const group = await this.getGroup(groupId);
+
+      // Admin cannot leave; must transfer ownership first
+      if (group.adminId === userId) {
+        throw new Error('Admin cannot leave. Transfer ownership to another member first.');
+      }
+
+      const updatedMembers = group.members.filter(m => m.userId !== userId);
+
+      await updateDoc(doc(db, 'familyGroups', groupId), {
+        members: updatedMembers,
+        updatedAt: serverTimestamp()
+      });
+
+      // Remove groupId from user profile
+      await updateDoc(doc(db, 'users', userId), {
+        groupId: null,
+        role: null,
+        updatedAt: serverTimestamp()
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error leaving group:', error);
+      throw error;
+    }
+  },
+
+  // Remove member from group (Admin Only)
+  // Admin removes another member from the group. The removed member can no
+  // longer access shared family expenses, but their past expenses are preserved.
+  // 
+  // Restriction: Admin cannot remove themselves. They must leave voluntarily
+  // or have another admin remove them.
+  // 
+  // @param adminId - Firebase Auth UID of requesting admin
+  // @param groupId - The family group ID
+  // @param memberId - Firebase Auth UID of member to remove
+  // @returns Promise<boolean> - true on success
+  // @throws Error if requester not admin, trying to remove admin, or group not found
+  // 
+  // Side effects:
+  // - Removes member from familyGroups/{groupId}.members array
+  // - Clears groupId and role from removed member's /users/{memberId} profile
+  // - Member's existing expenses remain but become inaccessible
+  // 
+  // Example:
+  //   removeMember('user123', 'grp456', 'user999')  // user123 must be admin
+  //   → Removes user999 from group
+  removeMember: async function(adminId, groupId, memberId) {
+    try {
+      const group = await this.getGroup(groupId);
+
+      if (group.adminId !== adminId) {
+        throw new Error('Only admin can remove members');
+      }
+
+      if (memberId === group.adminId) {
+        throw new Error('Cannot remove the admin');
+      }
+
+      const updatedMembers = group.members.filter(m => m.userId !== memberId);
+
+      await updateDoc(doc(db, 'familyGroups', groupId), {
+        members: updatedMembers,
+        updatedAt: serverTimestamp()
+      });
+
+      // Remove groupId from removed member's profile
+      await updateDoc(doc(db, 'users', memberId), {
+        groupId: null,
+        role: null,
+        updatedAt: serverTimestamp()
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error removing member:', error);
+      throw error;
+    }
+  },
+
+  // Change user role (Admin Only)
+  // Admin promotes or demotes a member between 'member' and 'admin' roles.
+  // This allows admins to delegate admin responsibilities.
+  // 
+  // Restriction: At least one admin must always exist in the group
+  // (Cannot demote the last admin, but can promote members to admin first).
+  // 
+  // @param adminId - Firebase Auth UID of requesting admin
+  // @param groupId - The family group ID
+  // @param userId - Firebase Auth UID of member to change
+  // @param newRole - New role: 'admin' or 'member'
+  // @returns Promise<boolean> - true on success
+  // @throws Error if requester not admin, invalid role, or group not found
+  // 
+  // Side effects:
+  // - Updates role in familyGroups/{groupId}.members array
+  // - Updates role in /users/{userId} profile
+  // - Role change takes effect immediately for permission checks
+  // 
+  // Example:
+  //   changeRole('user123', 'grp456', 'user789', 'admin')  // user123 must be admin
+  //   → Promotes user789 to admin
+  // 
+  //   changeRole('user123', 'grp456', 'user789', 'member')
+  //   → Demotes user789 back to member (if another admin exists)
+  changeRole: async function(adminId, groupId, userId, newRole) {
+    try {
+      const group = await this.getGroup(groupId);
+
+      if (group.adminId !== adminId) {
+        throw new Error('Only admin can change roles');
+      }
+
+      if (newRole !== 'admin' && newRole !== 'member') {
+        throw new Error('Invalid role');
+      }
+
+      const updatedMembers = group.members.map(m => 
+        m.userId === userId ? { ...m, role: newRole } : m
+      );
+
+      await updateDoc(doc(db, 'familyGroups', groupId), {
+        members: updatedMembers,
+        updatedAt: serverTimestamp()
+      });
+
+      // Update user's role
+      await updateDoc(doc(db, 'users', userId), {
+        role: newRole,
+        updatedAt: serverTimestamp()
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Error changing role:', error);
+      throw error;
+    }
+  }
 };
 
 export default app;

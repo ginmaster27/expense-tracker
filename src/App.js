@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
-import { auth, googleProvider, expensesAPI, incomeAPI } from './firebase';
+import { auth, googleProvider, expensesAPI, incomeAPI, familyGroupsAPI, usersAPI } from './firebase';
 import Dashboard from './Dashboard';
+import FamilyDashboard from './FamilyDashboard';
 import ExpensesPage from './ExpenseList';
 import Toast from './Toast';
 import './App.css';
@@ -16,12 +17,18 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [expenseDate, setExpenseDate] = useState(() => {
     const today = new Date();
-    return today.toISOString().split('T')[0];
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   });
   const [expenseDescription, setExpenseDescription] = useState('');
   const [isExpenseRecurring, setIsExpenseRecurring] = useState(false);
   const [expenseFrequency, setExpenseFrequency] = useState('monthly');
   const [expenseEndDate, setExpenseEndDate] = useState('');
+  const [expenseType, setExpenseType] = useState('shared'); // 'personal' | 'shared' (defaults to shared)
+  const [isExpenseSplit, setIsExpenseSplit] = useState(false); // Mark if expense is to be split
+  const [expenseSplitMembers, setExpenseSplitMembers] = useState([]); // Members to split with
 
   const [darkMode, setDarkMode] = useState(() => {
     try {
@@ -38,16 +45,28 @@ function App() {
 
   // Income state
   const [income, setIncome] = useState([]);
+  const [familyIncome, setFamilyIncome] = useState([]);
   const [incomeAmount, setIncomeAmount] = useState('');
+  
+  // Family shared expenses state
+  const [familySharedExpenses, setFamilySharedExpenses] = useState([]);
   const [incomeSource, setIncomeSource] = useState('');
   const [incomeDate, setIncomeDate] = useState(() => {
     const today = new Date();
-    return today.toISOString().split('T')[0];
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   });
 
   // Edit state
   const [editingExpenseId, setEditingExpenseId] = useState(null);
   const [editingIncomeId, setEditingIncomeId] = useState(null);
+  
+  // Recurring edit scope state
+  const [showRecurringEditScope, setShowRecurringEditScope] = useState(false);
+  const [recurringEditInstance, setRecurringEditInstance] = useState(null);
+  const [recurringEditScope, setRecurringEditScope] = useState(null); // 'this', 'future', or 'all'
   
   // Toggle states
   const [showExpenseForm, setShowExpenseForm] = useState(false);
@@ -56,6 +75,13 @@ function App() {
   // Loading states for form submissions
   const [isSubmittingExpense, setIsSubmittingExpense] = useState(false);
   const [isSubmittingIncome, setIsSubmittingIncome] = useState(false);
+  
+  // Family group state
+  const [userGroup, setUserGroup] = useState(null);
+  const [userRole, setUserRole] = useState(null);
+  const [showGroupManager, setShowGroupManager] = useState(false);
+  const [groupLoading, setGroupLoading] = useState(false);
+  const [viewingFamilyDashboard, setViewingFamilyDashboard] = useState(false);
   
   // Toast state
   const [toast, setToast] = useState(null);
@@ -203,7 +229,10 @@ function App() {
         category: trimmedCategory,
         date: expenseDate,
         description: expenseDescription.trim(),
-        isRecurring: isExpenseRecurring
+        isRecurring: isExpenseRecurring,
+        type: expenseType, // 'personal' | 'shared'
+        isSplit: isExpenseSplit,
+        splitMembers: isExpenseSplit ? expenseSplitMembers : [] // Array of member IDs
       };
 
       // Add recurring-specific fields if marking as recurring
@@ -213,27 +242,167 @@ function App() {
       }
 
       if (editingExpenseId) {
-        // Update existing expense
-        if (user) {
-          await expensesAPI.updateExpense(user.uid, editingExpenseId, newExpenseData);
+        // Handle different edit scenarios
+        
+        // Check if this is a recurring edit with scope
+        const isOverride = editingExpenseId.startsWith('override-');
+        const isSplit = editingExpenseId.startsWith('split-');
+        const actualEditingId = editingExpenseId.replace('override-', '').replace('split-', '');
+        
+        if (isOverride && recurringEditScope === 'this') {
+          // EDIT ONLY THIS OCCURRENCE
+          // Extract the date and base ID from the special ID format
+          // actualEditingId format: YYYY-MM-DD-baseId or similar
+          const parts = actualEditingId.split('-');
+          const dateStr = parts.slice(0, 3).join('-'); // YYYY-MM-DD
+          const baseId = parts.slice(3).join('-'); // remaining is baseId
+          
+          // Find the master recurring record
+          const masterId = baseId;
+          const masterRecord = expenses.find(exp => exp.id === masterId && exp.isRecurring);
+          
+          if (masterRecord) {
+            // Create a one-time override expense for this specific date
+            const overrideData = {
+              ...newExpenseData,
+              isRecurring: false, // Make it a one-time expense
+              frequency: undefined,
+              endDate: undefined,
+              overriddenDate: dateStr // Mark which date it overrides
+            };
+            
+            // Generate a unique ID for this override
+            const overrideId = `${masterId}-override-${dateStr}`;
+            const overrideExpense = { id: overrideId, ...overrideData };
+            
+            // Add the override expense
+            const updatedExpenses = [...expenses, overrideExpense];
+            
+            // Update master record to exclude this date
+            const updatedMaster = {
+              ...masterRecord,
+              excludedDates: [...(masterRecord.excludedDates || []), dateStr]
+            };
+            
+            // Replace master and add override
+            const finalExpenses = updatedExpenses.map(exp => 
+              exp.id === masterId ? updatedMaster : exp
+            );
+            
+            if (user) {
+              await expensesAPI.updateExpense(user.uid, masterId, {
+                ...updatedMaster,
+                excludedDates: updatedMaster.excludedDates
+              });
+              await expensesAPI.addExpense(user.uid, overrideData);
+            } else {
+              setExpenses(finalExpenses);
+              localStorage.setItem('expenses', JSON.stringify(finalExpenses));
+            }
+            
+            setExpenses(finalExpenses);
+            showToast('This occurrence has been modified independently', 'success');
+          }
+        } else if (isSplit && recurringEditScope === 'future') {
+          // EDIT THIS AND FUTURE OCCURRENCES
+          // Split the recurring rule:
+          // 1. Shorten the original recurring rule to end before this date
+          // 2. Create a new recurring rule starting from this date
+          
+          const parts = actualEditingId.split('-');
+          const dateStr = parts.slice(0, 3).join('-'); // YYYY-MM-DD
+          const baseId = parts.slice(3).join('-'); // remaining is baseId
+          
+          const masterRecord = expenses.find(exp => exp.id === baseId && exp.isRecurring);
+          
+          if (masterRecord) {
+            // Get the day before this date for the original rule's end date
+            const splitDate = new Date(dateStr);
+            splitDate.setDate(splitDate.getDate() - 1);
+            const originalEndDate = splitDate.toISOString().split('T')[0];
+            
+            // Update the original rule to end before this date
+            const updatedMaster = {
+              ...masterRecord,
+              endDate: originalEndDate
+            };
+            
+            // Create a new recurring rule starting from this date
+            const newRecurringId = `${Date.now()}-${baseId}-split`;
+            const newRecurringRule = {
+              id: newRecurringId,
+              amount: newExpenseData.amount,
+              category: newExpenseData.category,
+              date: dateStr, // Start from this date
+              description: newExpenseData.description,
+              isRecurring: true,
+              frequency: newExpenseData.frequency || masterRecord.frequency,
+              endDate: newExpenseData.endDate || masterRecord.endDate,
+              type: newExpenseData.type
+            };
+            
+            // Update in all member collections if shared
+            const updatedExpenses = expenses.map(exp => 
+              exp.id === baseId ? updatedMaster : exp
+            );
+            updatedExpenses.push(newRecurringRule);
+            
+            if (user) {
+              await expensesAPI.updateExpense(user.uid, baseId, updatedMaster);
+              await expensesAPI.addExpense(user.uid, newRecurringRule);
+            } else {
+              setExpenses(updatedExpenses);
+              localStorage.setItem('expenses', JSON.stringify(updatedExpenses));
+            }
+            
+            setExpenses(updatedExpenses);
+            showToast('Recurring rule split. New rule created from this date forward.', 'success');
+          }
         } else {
-          const updated = expenses.map(exp => 
-            exp.id === editingExpenseId ? { ...exp, ...newExpenseData } : exp
-          );
-          setExpenses(updated);
-          localStorage.setItem('expenses', JSON.stringify(updated));
+          // EDIT ENTIRE SERIES or regular expense
+          // Update existing expense as normal
+          const expenseToUpdate = expenses.find(exp => exp.id === editingExpenseId);
+          const isRecurringUpdate = expenseToUpdate?.isRecurring;
+          
+          if (user) {
+            // Check if it's a shared expense with a family group
+            if (newExpenseData.type === 'shared' && userGroup && userGroup.members) {
+              const memberIds = userGroup.members.map(m => m.userId);
+              await expensesAPI.updateSharedExpense(memberIds, editingExpenseId, newExpenseData);
+            } else {
+              await expensesAPI.updateExpense(user.uid, editingExpenseId, newExpenseData);
+            }
+          } else {
+            const updated = expenses.map(exp => 
+              exp.id === editingExpenseId ? { ...exp, ...newExpenseData } : exp
+            );
+            setExpenses(updated);
+            localStorage.setItem('expenses', JSON.stringify(updated));
+          }
+          
+          // Update in state
+          setExpenses(expenses.map(exp => 
+            exp.id === editingExpenseId ? { id: editingExpenseId, ...newExpenseData } : exp
+          ));
+          
+          const updateType = isRecurringUpdate ? 'Recurring expense' : 'Expense';
+          showToast(`${updateType} updated successfully. All instances updated.`, 'success');
         }
         
-        setExpenses(expenses.map(exp => 
-          exp.id === editingExpenseId ? { id: editingExpenseId, ...newExpenseData } : exp
-        ));
         setEditingExpenseId(null);
-        showToast('Expense updated successfully', 'success');
+        setRecurringEditScope(null);
       } else {
         // Add new expense
         if (user) {
-          // Save to Firestore if user is logged in
-          const savedExpense = await expensesAPI.addExpense(user.uid, newExpenseData);
+          // For both recurring and non-recurring: store the rule, not individual instances
+          let savedExpense;
+          if (newExpenseData.type === 'shared' && userGroup && userGroup.members) {
+            const memberIds = userGroup.members.map(m => m.userId);
+            savedExpense = await expensesAPI.addSharedExpense(user.uid, memberIds, newExpenseData);
+          } else {
+            // Save to Firestore if user is logged in (personal expense)
+            savedExpense = await expensesAPI.addExpense(user.uid, newExpenseData);
+          }
           setExpenses([...expenses, savedExpense]);
         } else {
           // Save to localStorage if user is not logged in
@@ -253,6 +422,9 @@ function App() {
       setIsExpenseRecurring(false);
       setExpenseFrequency('monthly');
       setExpenseEndDate('');
+      setExpenseType('shared');
+      setIsExpenseSplit(false);
+      setExpenseSplitMembers([]);
       const currentDate = new Date();
       setExpenseDate(currentDate.toISOString().split('T')[0]);
       setError('');
@@ -265,20 +437,94 @@ function App() {
   };
 
   const handleDeleteExpense = async (id) => {
-    const confirmed = window.confirm('Are you sure you want to delete this expense?');
+    // Check if deleting a recurring expense instance or a regular expense
+    const expenseToDelete = expenses.find(exp => exp.id === id);
+    
+    // Detect if this is a generated recurring expense instance
+    // Generated instances have ids like "base-id-YYYY-MM-DD" and isGenerated: true
+    const isGeneratedInstance = expenseToDelete?.isGenerated;
+    const isRecurringInstance = isGeneratedInstance && id.includes('-') && /^\d{4}-\d{2}-\d{2}$/.test(id.split('-').slice(-3).join('-'));
+    
+    let deleteTitle = 'Delete Expense?';
+    let deleteMessage = 'Are you sure you want to delete this expense?\n\nThis action cannot be undone.';
+    
+    if (isRecurringInstance) {
+      deleteTitle = 'Delete This Occurrence?';
+      deleteMessage = '⚠️ Delete only this single occurrence?\n\nThe recurring series will continue, and this date will be excluded.\n\nThis action cannot be undone.';
+    } else if (expenseToDelete?.isRecurring) {
+      deleteTitle = 'Delete Entire Recurring Series?';
+      deleteMessage = '⚠️ Delete the entire recurring series?\n\nAll current and future occurrences will be deleted.\nYou can delete individual occurrences instead.\n\nThis action cannot be undone.';
+    }
+    
+    const confirmed = window.confirm(deleteTitle + '\n\n' + deleteMessage);
     if (confirmed) {
       try {
-        if (user) {
-          // Delete from Firestore if user is logged in
-          await expensesAPI.deleteExpense(user.uid, id);
+        if (isRecurringInstance) {
+          // This is an instance of a recurring expense
+          // Extract the date from the instance id (format: baseId-YYYY-MM-DD)
+          const dateParts = id.split('-').slice(-3);
+          const excludedDate = dateParts.join('-');
+          
+          // Find the master recurring record
+          // The base id is everything except the last date part
+          const baseId = id.substring(0, id.lastIndexOf('-' + excludedDate));
+          const masterRecord = expenses.find(exp => exp.id === baseId && exp.isRecurring);
+          
+          if (masterRecord && user) {
+            // Update master record to exclude this date
+            const excludedDates = [...(masterRecord.excludedDates || []), excludedDate];
+            const updatedMaster = { ...masterRecord, excludedDates };
+            
+            // Update in Firestore
+            if (masterRecord.type === 'shared' && userGroup && userGroup.members) {
+              const memberIds = userGroup.members.map(m => m.userId);
+              await expensesAPI.updateSharedExpense(memberIds, baseId, updatedMaster);
+            } else {
+              await expensesAPI.updateExpense(user.uid, baseId, updatedMaster);
+            }
+            
+            // Update in state: replace the master record with excluded date
+            setExpenses(expenses.map(exp => 
+              exp.id === baseId ? updatedMaster : exp
+            ));
+            
+            showToast('This occurrence removed from recurring series', 'success');
+          } else if (isRecurringInstance) {
+            // For localStorage, handle recurring instance deletion
+            const dateParts = id.split('-').slice(-3);
+            const excludedDate = dateParts.join('-');
+            const baseId = id.substring(0, id.lastIndexOf('-' + excludedDate));
+            const masterRecord = expenses.find(exp => exp.id === baseId && exp.isRecurring);
+            
+            if (masterRecord) {
+              const excludedDates = [...(masterRecord.excludedDates || []), excludedDate];
+              const updatedMaster = { ...masterRecord, excludedDates };
+              const updated = expenses.map(exp => exp.id === baseId ? updatedMaster : exp);
+              setExpenses(updated);
+              localStorage.setItem('expenses', JSON.stringify(updated));
+              showToast('This occurrence removed from recurring series', 'success');
+            }
+          }
         } else {
-          // Delete from localStorage if user is not logged in
-          const updated = expenses.filter(expense => expense.id !== id);
-          localStorage.setItem('expenses', JSON.stringify(updated));
+          // Regular expense deletion (not a recurring instance)
+          if (user) {
+            // Check if it's a shared expense
+            if (expenseToDelete && expenseToDelete.type === 'shared' && userGroup && userGroup.members) {
+              const memberIds = userGroup.members.map(m => m.userId);
+              await expensesAPI.deleteSharedExpense(memberIds, id);
+            } else {
+              // Delete from Firestore if user is logged in (personal expense)
+              await expensesAPI.deleteExpense(user.uid, id);
+            }
+          } else {
+            // Delete from localStorage if user is not logged in
+            const updated = expenses.filter(expense => expense.id !== id);
+            localStorage.setItem('expenses', JSON.stringify(updated));
+          }
+          
+          setExpenses(expenses.filter(expense => expense.id !== id));
+          showToast('Expense deleted successfully', 'success');
         }
-        
-        setExpenses(expenses.filter(expense => expense.id !== id));
-        showToast('Expense deleted successfully', 'success');
       } catch (error) {
         console.error('Error deleting expense:', error);
         setError('Failed to delete expense: ' + error.message);
@@ -288,8 +534,43 @@ function App() {
   };
 
   const handleEditExpense = (id) => {
-    const expense = expenses.find(exp => exp.id === id);
+    // Load expense data for editing - works with both regular and recurring expenses
+    // For recurring instances: shows a scope selector dialog
+    
+    // First, try to find the expense directly in the array
+    let expense = expenses.find(exp => exp.id === id);
+    
+    // If not found, check if this is a generated recurring instance (pattern: baseId-YYYY-MM-DD)
+    if (!expense && id.includes('-') && /^\d{4}-\d{2}-\d{2}$/.test(id.split('-').slice(-3).join('-'))) {
+      // Extract the base ID and date from the instance ID
+      const dateParts = id.split('-').slice(-3).join('-'); // YYYY-MM-DD
+      const baseId = id.substring(0, id.lastIndexOf('-' + dateParts));
+      
+      // Find the master recurring record
+      const masterRecord = expenses.find(exp => exp.id === baseId && exp.isRecurring);
+      
+      if (masterRecord) {
+        // Create a mock instance object that includes master data
+        expense = {
+          ...masterRecord,
+          id: id, // Use the instance ID
+          date: dateParts, // Use the instance date
+          isGenerated: true
+        };
+      }
+    }
+    
     if (expense) {
+      // Check if this is a generated recurring instance (e.g., id includes date suffix)
+      // Generated instances have format: baseId-YYYY-MM-DD and isGenerated: true
+      if (expense.isGenerated && expense.isRecurring) {
+        // This is a generated recurring instance - show scope selector
+        setRecurringEditInstance(expense);
+        setShowRecurringEditScope(true);
+        return;
+      }
+
+      // Regular or master recurring expense - load form directly
       setAmount(expense.amount.toString());
       setCategory(expense.category);
       setExpenseDate(expense.date);
@@ -297,9 +578,80 @@ function App() {
       setIsExpenseRecurring(expense.isRecurring || false);
       setExpenseFrequency(expense.frequency || 'monthly');
       setExpenseEndDate(expense.endDate || '');
+      setExpenseType(expense.type || 'personal');
+      setIsExpenseSplit(expense.isSplit || false);
+      setExpenseSplitMembers(expense.splitMembers || []);
       setEditingExpenseId(id);
       setError('');
+      setShowExpenseForm(true);
     }
+  };
+
+  // Handle recurring edit scope selection
+  const handleRecurringEditScopeSelect = (scope) => {
+    // scope: 'this' (only this occurrence), 'future' (this and future), 'all' (entire series)
+    
+    if (!recurringEditInstance) return;
+
+    const instance = recurringEditInstance;
+    
+    // Extract instance date and base ID
+    const instanceDate = instance.date; // YYYY-MM-DD
+    const baseId = instance.id.replace(`-${instanceDate}`, '');
+    const masterRecord = expenses.find(exp => exp.id === baseId && exp.isRecurring);
+
+    if (scope === 'all') {
+      // Edit entire series - edit the master record
+      if (masterRecord) {
+        setAmount(masterRecord.amount.toString());
+        setCategory(masterRecord.category);
+        setExpenseDate(masterRecord.date);
+        setExpenseDescription(masterRecord.description || '');
+        setIsExpenseRecurring(masterRecord.isRecurring);
+        setExpenseFrequency(masterRecord.frequency);
+        setExpenseEndDate(masterRecord.endDate || '');
+        setExpenseType(masterRecord.type || 'personal');
+        setIsExpenseSplit(masterRecord.isSplit || false);
+        setExpenseSplitMembers(masterRecord.splitMembers || []);
+        setEditingExpenseId(baseId);
+        setRecurringEditScope('all');
+      }
+    } else if (scope === 'this') {
+      // Edit only this occurrence - create a one-off override
+      // Load the instance values but mark as non-recurring
+      setAmount(instance.amount.toString());
+      setCategory(instance.category);
+      setExpenseDate(instance.date);
+      setExpenseDescription(instance.description || '');
+      setIsExpenseRecurring(false); // Will be a one-time expense
+      setExpenseFrequency('monthly');
+      setExpenseEndDate('');
+      setExpenseType(instance.type || 'personal');
+      setIsExpenseSplit(instance.isSplit || false);
+      setExpenseSplitMembers(instance.splitMembers || []);
+      setEditingExpenseId(`override-${instanceDate}-${baseId}`); // Special ID for override
+      setRecurringEditScope('this');
+    } else if (scope === 'future') {
+      // Edit this and future occurrences - will split the recurring rule
+      // Load the instance values as the new recurrence
+      setAmount(instance.amount.toString());
+      setCategory(instance.category);
+      setExpenseDate(instance.date);
+      setExpenseDescription(instance.description || '');
+      setIsExpenseRecurring(true); // Will create new recurring from this date
+      setExpenseFrequency(masterRecord?.frequency || 'monthly');
+      setExpenseEndDate(masterRecord?.endDate || '');
+      setExpenseType(instance.type || 'personal');
+      setIsExpenseSplit(instance.isSplit || false);
+      setExpenseSplitMembers(instance.splitMembers || []);
+      setEditingExpenseId(`split-${instanceDate}-${baseId}`); // Special ID for split
+      setRecurringEditScope('future');
+    }
+
+    setRecurringEditInstance(null);
+    setShowRecurringEditScope(false);
+    setError('');
+    setShowExpenseForm(true);
   };
 
   // Add income handler
@@ -435,6 +787,7 @@ function App() {
       setIncomeDate(inc.date);
       setEditingIncomeId(id);
       setError('');
+      setShowIncomeForm(true);
     }
   };
 
@@ -455,19 +808,41 @@ function App() {
     setError('');
   };
 
-  const totalAmount = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const totalIncome = income.reduce((sum, inc) => sum + inc.amount, 0);
+  // Helper function to expand recurring expense into all occurrences
+  // Note: We don't include recurring master records directly (they're generated as instances)
 
-  // Generate recurring expense instances based on isRecurring flag on individual expenses
+  // DYNAMIC GENERATION OF RECURRING EXPENSE INSTANCES
+  // This function is called on every render and generates instances dynamically from master records
+  // 
+  // How it works:
+  // 1. Only master recurring records (isRecurring: true) are stored in Firestore/localStorage
+  // 2. Instances are generated on-demand based on the date filter (month/year selection)
+  // 3. When a recurring expense is edited, the master record updates
+  // 4. On next render, this function regenerates ALL instances with the new values
+  // 5. No duplicate storage needed - scales efficiently
+  //
+  // This approach ensures:
+  // Format a Date object to ISO date string (YYYY-MM-DD) without timezone conversion
+  const formatDateToISO = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // - Editing a recurring expense updates all instances (past and future) automatically
+  // - Minimal data storage (1 record instead of N occurrences)
+  // - Consistent state with no sync issues
   const getGeneratedRecurringInstances = () => {
+    // Generate recurring expense instances dynamically from recurrence rules
     const generatedExpenses = [];
     const seenKeys = new Set();
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // Reset time for comparison
-    
+    today.setHours(0, 0, 0, 0);
+
     // Determine the date range to generate instances for
     let startDate, endDate;
-    
+
     if (selectedMonth === 'all' && selectedYear === 'all') {
       // For "all" filter, generate for past 12 months and next 12 months
       const todayDate = new Date();
@@ -477,19 +852,31 @@ function App() {
       // Generate only for the selected month/year
       const year = selectedYear === 'all' ? new Date().getFullYear() : parseInt(selectedYear);
       const month = selectedMonth === 'all' ? new Date().getMonth() : parseInt(selectedMonth) - 1;
-      
+
       startDate = new Date(year, month, 1);
       endDate = new Date(year, month + 1, 0);
     }
 
-    // Process each recurring expense
+    // Process each expense and generate recurring instances
     expenses.forEach((expense) => {
       if (!expense.isRecurring) {
         return; // Skip non-recurring expenses
       }
 
-      const expenseStartDate = new Date(expense.date);
-      const expenseEndDate = expense.endDate ? new Date(expense.endDate) : null;
+      // Parse expense date safely without timezone conversion
+      // expense.date is in ISO format: YYYY-MM-DD
+      const [expenseYear, expenseMonth, expenseDay] = expense.date.split('-').map(Number);
+      const expenseStartDate = new Date(expenseYear, expenseMonth - 1, expenseDay, 0, 0, 0, 0);
+      
+      // Parse end date safely if it exists
+      const expenseEndDate = expense.endDate 
+        ? (() => {
+            const [endYear, endMonth, endDay] = expense.endDate.split('-').map(Number);
+            return new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
+          })()
+        : null;
+      
+      const frequency = expense.frequency || 'monthly';
 
       // Check if this recurring expense is active during the selected period
       if (expenseStartDate > endDate) {
@@ -500,29 +887,26 @@ function App() {
         return; // Recurring expense has already ended
       }
 
-      const frequency = expense.frequency || 'monthly';
+      // Generate instances for this recurrence rule
+      let currentDate = new Date(expenseStartDate);
 
-      if (frequency === 'monthly') {
-        // Generate monthly instances
-        const dayOfMonth = expenseStartDate.getDate();
-        let currentDate = new Date(startDate);
-
+      if (frequency === 'daily') {
         while (currentDate <= endDate) {
-          // Create a date with the same day of month as the original expense
-          const instanceDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), dayOfMonth);
-
-          // Check if this instance is within valid range
-          if (instanceDate >= expenseStartDate && (!expenseEndDate || instanceDate <= expenseEndDate) &&
-              instanceDate >= startDate && instanceDate <= endDate) {
-            const dateStr = instanceDate.toISOString().split('T')[0];
+          if (currentDate >= startDate && (!expenseEndDate || currentDate <= expenseEndDate)) {
+            const dateStr = formatDateToISO(currentDate);
             const uniqueKey = `${expense.id}-${dateStr}`;
+
+            // Skip if this date has been excluded from the recurring series
+            if (expense.excludedDates && expense.excludedDates.includes(dateStr)) {
+              currentDate.setDate(currentDate.getDate() + 1);
+              continue;
+            }
 
             if (!seenKeys.has(uniqueKey)) {
               seenKeys.add(uniqueKey);
-              const instanceDateForComparison = new Date(dateStr);
-              instanceDateForComparison.setHours(0, 0, 0, 0);
-              const isProjected = instanceDateForComparison > today;
-              
+              // Use currentDate directly (already properly constructed)
+              const isProjected = currentDate > today;
+
               generatedExpenses.push({
                 ...expense,
                 id: uniqueKey,
@@ -532,25 +916,68 @@ function App() {
               });
             }
           }
-
-          // Move to next month
-          currentDate.setMonth(currentDate.getMonth() + 1);
+          currentDate.setDate(currentDate.getDate() + 1);
         }
       } else if (frequency === 'weekly') {
-        // Generate weekly instances
-        let currentDate = new Date(expenseStartDate);
-
-        while (currentDate <= endDate && (!expenseEndDate || currentDate <= expenseEndDate)) {
-          if (currentDate >= startDate) {
-            const dateStr = currentDate.toISOString().split('T')[0];
+        while (currentDate <= endDate) {
+          if (currentDate >= startDate && (!expenseEndDate || currentDate <= expenseEndDate)) {
+            const dateStr = formatDateToISO(currentDate);
             const uniqueKey = `${expense.id}-${dateStr}`;
+
+            // Skip if this date has been excluded from the recurring series
+            if (expense.excludedDates && expense.excludedDates.includes(dateStr)) {
+              currentDate.setDate(currentDate.getDate() + 7);
+              continue;
+            }
 
             if (!seenKeys.has(uniqueKey)) {
               seenKeys.add(uniqueKey);
-              const instanceDateForComparison = new Date(dateStr);
-              instanceDateForComparison.setHours(0, 0, 0, 0);
-              const isProjected = instanceDateForComparison > today;
-              
+              // Use currentDate directly (already properly constructed)
+              const isProjected = currentDate > today;
+
+              generatedExpenses.push({
+                ...expense,
+                id: uniqueKey,
+                date: dateStr,
+                isGenerated: true,
+                isProjected: isProjected
+              });
+            }
+          }
+          currentDate.setDate(currentDate.getDate() + 7);
+        }
+      } else if (frequency === 'monthly') {
+        const dayOfMonth = expenseStartDate.getDate();
+        currentDate = new Date(startDate);
+
+        while (currentDate <= endDate) {
+          // Try to create a date with the original day of month
+          const year = currentDate.getFullYear();
+          const month = currentDate.getMonth();
+          const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+          const dayToUse = Math.min(dayOfMonth, lastDayOfMonth);
+
+          const instanceDate = new Date(year, month, dayToUse);
+
+          if (
+            instanceDate >= expenseStartDate &&
+            (!expenseEndDate || instanceDate <= expenseEndDate) &&
+            instanceDate >= startDate &&
+            instanceDate <= endDate
+          ) {
+            const dateStr = formatDateToISO(instanceDate);
+            const uniqueKey = `${expense.id}-${dateStr}`;
+
+            // Skip if this date has been excluded from the recurring series
+            if (expense.excludedDates && expense.excludedDates.includes(dateStr)) {
+              currentDate.setMonth(currentDate.getMonth() + 1);
+              continue;
+            }
+
+            if (!seenKeys.has(uniqueKey)) {
+              seenKeys.add(uniqueKey);
+              const isProjected = instanceDate > today;
+
               generatedExpenses.push({
                 ...expense,
                 id: uniqueKey,
@@ -561,8 +988,7 @@ function App() {
             }
           }
 
-          // Move to next week
-          currentDate.setDate(currentDate.getDate() + 7);
+          currentDate.setMonth(currentDate.getMonth() + 1);
         }
       }
     });
@@ -571,31 +997,37 @@ function App() {
   };
 
   const getFilteredExpenses = () => {
+    // Filter base expenses, but exclude recurring rules (show only instances)
     const filtered = expenses.filter((expense) => {
+      // Skip the recurring rule itself if it matches date filter
+      if (expense.isRecurring) {
+        return false; // Don't show recurring rules, only their generated instances
+      }
+
       // Parse ISO date format (YYYY-MM-DD)
       const [year, month] = expense.date.split('-').map(Number);
-      
+
       // Check month filter
       const monthMatch = selectedMonth === 'all' || month === parseInt(selectedMonth);
-      
+
       // Check year filter
       const yearMatch = selectedYear === 'all' || year === parseInt(selectedYear);
-      
+
       // If no search query, return month/year filtered
       if (!searchQuery.trim()) {
         return monthMatch && yearMatch;
       }
-      
+
       // Apply month/year and search filters
       const searchLower = searchQuery.toLowerCase();
       const categoryMatch = expense.category.toLowerCase().includes(searchLower);
-      
+
       return monthMatch && yearMatch && categoryMatch;
     });
 
     // Add generated recurring expense instances based on isRecurring flag
     const generatedExpenses = getGeneratedRecurringInstances();
-    
+
     return [...filtered, ...generatedExpenses];
   };
 
@@ -604,6 +1036,9 @@ function App() {
   const getFilteredTotal = () => {
     return filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);
   };
+
+  // Calculate totalAmount based on filtered expenses (includes recurring instances)
+  const totalAmount = getFilteredTotal();
 
   const getFilteredIncome = () => {
     return income.filter((inc) => {
@@ -624,8 +1059,68 @@ function App() {
     return getFilteredIncome().reduce((sum, inc) => sum + inc.amount, 0);
   };
 
+  // Calculate totalIncome based on filtered income (for selected month/year)
+  const totalIncome = getFilteredIncomeTotal();
+
   const getRemainingBalance = () => {
     return getFilteredIncomeTotal() - getFilteredTotal();
+  };
+
+  // Get all-time expenses total (regular + recurring instances until end of current month)
+  const getAllTimeExpensesTotal = () => {
+    const today = new Date();
+    const endOfCurrentMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    endOfCurrentMonth.setHours(23, 59, 59, 999);
+
+    // Sum all regular expenses (exclude master recurring records)
+    let regularTotal = 0;
+    expenses.forEach((expense) => {
+      if (!expense.isRecurring) {
+        regularTotal += expense.amount;
+      }
+    });
+
+    // Add generated recurring instances up to end of current month
+    const allGeneratedInstances = getGeneratedRecurringInstancesForDateRange(
+      new Date(0), // From beginning of time
+      endOfCurrentMonth
+    );
+    const recurringTotal = allGeneratedInstances.reduce((sum, expense) => sum + expense.amount, 0);
+
+    return regularTotal + recurringTotal;
+  };
+
+  // Get total income for the current year
+  const getYearlyTotalIncome = () => {
+    const currentYear = new Date().getFullYear();
+    return income.reduce((sum, inc) => {
+      const [year] = inc.date.split('-').map(Number);
+      return year === currentYear ? sum + inc.amount : sum;
+    }, 0);
+  };
+
+  // Get monthly income breakdown for the current year
+  const getMonthlyIncomeBreakdown = () => {
+    const currentYear = new Date().getFullYear();
+    const monthlyBreakdown = Array(12).fill(0);
+
+    income.forEach((inc) => {
+      const [year, month] = inc.date.split('-').map(Number);
+      if (year === currentYear) {
+        monthlyBreakdown[month - 1] += inc.amount;
+      }
+    });
+
+    // Return only months with income
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return monthlyBreakdown
+      .map((total, index) => ({
+        month: monthNames[index],
+        monthNum: index + 1,
+        total
+      }))
+      .filter((item) => item.total > 0)
+      .sort((a, b) => a.monthNum - b.monthNum);
   };
 
   // Group expenses by week within the current month
@@ -701,13 +1196,29 @@ function App() {
       // Format month label (e.g., "Jan 2026", "Feb 2026")
       const monthLabel = monthDate.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
       
-      // Calculate total expenses for this month
+      // Set date range for this month
+      const monthStartDate = new Date(year, monthDate.getMonth(), 1);
+      monthStartDate.setHours(0, 0, 0, 0);
+      const monthEndDate = new Date(year, monthDate.getMonth() + 1, 0);
+      monthEndDate.setHours(23, 59, 59, 999);
+      
+      // Calculate total expenses for this month from regular expenses (skip master recurring records)
       let monthTotal = 0;
       expenses.forEach((expense) => {
+        // Skip master recurring records - we'll add generated instances instead
+        if (expense.isRecurring) {
+          return;
+        }
         const [expYear, expMonth] = expense.date.split('-').map(Number);
         if (expYear === year && expMonth === month) {
           monthTotal += expense.amount;
         }
+      });
+      
+      // Add generated recurring expense instances for this month
+      const generatedExpenses = getGeneratedRecurringInstancesForDateRange(monthStartDate, monthEndDate);
+      generatedExpenses.forEach((expense) => {
+        monthTotal += expense.amount;
       });
       
       trendData.push({
@@ -790,8 +1301,10 @@ function App() {
     let endDate = new Date(today);
 
     if (filterType === 'current') {
-      // Current month - from 1st to today
+      // Current month - entire month
       startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+      // Include entire current month, not just up to today
+      endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
     } else if (filterType === 'previous') {
       // Previous month - entire previous month
       const prevMonth = today.getMonth() === 0 ? 11 : today.getMonth() - 1;
@@ -802,23 +1315,214 @@ function App() {
     } else if (filterType === '3months') {
       // Last 3 months
       startDate = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+      // Include entire current month, not just up to today
+      endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
     } else if (filterType === '6months') {
       // Last 6 months
       startDate = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+      // Include entire current month, not just up to today
+      endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
     }
 
+    // Reset time to start/end of day for accurate date comparisons
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
+
     return expenses.filter((expense) => {
-      const expenseDate = new Date(expense.date);
+      // Skip recurring master records - only include generated instances and regular expenses
+      if (expense.isRecurring) {
+        return false;
+      }
+      
+      // Parse ISO date format (YYYY-MM-DD) safely without timezone conversion
+      const [year, month, day] = expense.date.split('-').map(Number);
+      // Create date at start of day to avoid timezone issues
+      const expenseDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+      
       return expenseDate >= startDate && expenseDate <= endDate;
     });
   };
 
+  // Helper function to generate recurring instances for a specific date range
+  const getGeneratedRecurringInstancesForDateRange = (startDate, endDate) => {
+    const generatedExpenses = [];
+    const seenKeys = new Set();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    expenses.forEach((expense) => {
+      if (!expense.isRecurring) {
+        return; // Skip non-recurring expenses
+      }
+
+      // Parse expense date safely without timezone conversion
+      const [expenseYear, expenseMonth, expenseDay] = expense.date.split('-').map(Number);
+      const expenseStartDate = new Date(expenseYear, expenseMonth - 1, expenseDay, 0, 0, 0, 0);
+      
+      // Parse end date safely if it exists
+      const expenseEndDate = expense.endDate 
+        ? (() => {
+            const [endYear, endMonth, endDay] = expense.endDate.split('-').map(Number);
+            return new Date(endYear, endMonth - 1, endDay, 23, 59, 59, 999);
+          })()
+        : null;
+      
+      const frequency = expense.frequency || 'monthly';
+
+      // Check if this recurring expense is active during the requested period
+      if (expenseStartDate > endDate) {
+        return; // Recurring expense hasn't started yet
+      }
+
+      if (expenseEndDate && expenseEndDate < startDate) {
+        return; // Recurring expense has already ended
+      }
+
+      // Generate instances for this recurrence rule
+      let currentDate = new Date(expenseStartDate);
+
+      if (frequency === 'daily') {
+        while (currentDate <= endDate) {
+          if (currentDate >= startDate && (!expenseEndDate || currentDate <= expenseEndDate)) {
+            const dateStr = formatDateToISO(currentDate);
+            const uniqueKey = `${expense.id}-${dateStr}`;
+
+            if (expense.excludedDates && expense.excludedDates.includes(dateStr)) {
+              currentDate.setDate(currentDate.getDate() + 1);
+              continue;
+            }
+
+            if (!seenKeys.has(uniqueKey)) {
+              seenKeys.add(uniqueKey);
+              const isProjected = currentDate > today;
+
+              generatedExpenses.push({
+                ...expense,
+                id: uniqueKey,
+                date: dateStr,
+                isGenerated: true,
+                isProjected: isProjected
+              });
+            }
+          }
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+      } else if (frequency === 'weekly') {
+        while (currentDate <= endDate) {
+          if (currentDate >= startDate && (!expenseEndDate || currentDate <= expenseEndDate)) {
+            const dateStr = formatDateToISO(currentDate);
+            const uniqueKey = `${expense.id}-${dateStr}`;
+
+            if (expense.excludedDates && expense.excludedDates.includes(dateStr)) {
+              currentDate.setDate(currentDate.getDate() + 7);
+              continue;
+            }
+
+            if (!seenKeys.has(uniqueKey)) {
+              seenKeys.add(uniqueKey);
+              const isProjected = currentDate > today;
+
+              generatedExpenses.push({
+                ...expense,
+                id: uniqueKey,
+                date: dateStr,
+                isGenerated: true,
+                isProjected: isProjected
+              });
+            }
+          }
+          currentDate.setDate(currentDate.getDate() + 7);
+        }
+      } else if (frequency === 'monthly') {
+        const dayOfMonth = expenseStartDate.getDate();
+        currentDate = new Date(startDate);
+
+        while (currentDate <= endDate) {
+          const year = currentDate.getFullYear();
+          const month = currentDate.getMonth();
+          const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+          const dayToUse = Math.min(dayOfMonth, lastDayOfMonth);
+
+          const instanceDate = new Date(year, month, dayToUse);
+
+          if (
+            instanceDate >= expenseStartDate &&
+            (!expenseEndDate || instanceDate <= expenseEndDate) &&
+            instanceDate >= startDate &&
+            instanceDate <= endDate
+          ) {
+            const dateStr = formatDateToISO(instanceDate);
+            const uniqueKey = `${expense.id}-${dateStr}`;
+
+            if (expense.excludedDates && expense.excludedDates.includes(dateStr)) {
+              currentDate.setMonth(currentDate.getMonth() + 1);
+              continue;
+            }
+
+            if (!seenKeys.has(uniqueKey)) {
+              seenKeys.add(uniqueKey);
+              const isProjected = instanceDate > today;
+
+              generatedExpenses.push({
+                ...expense,
+                id: uniqueKey,
+                date: dateStr,
+                isGenerated: true,
+                isProjected: isProjected
+              });
+            }
+          }
+
+          currentDate.setMonth(currentDate.getMonth() + 1);
+        }
+      }
+    });
+
+    return generatedExpenses;
+  };
+
+  // Get all filtered expenses (regular + recurring instances) for a specific chart filter range
+  const getFilteredExpensesForChartsRange = (filterType) => {
+    const filteredExpenses = getFilteredExpensesByDateRange(filterType);
+    
+    // Generate recurring instances for this date range
+    const today = new Date();
+    let startDate = new Date();
+    let endDate = new Date(today);
+
+    if (filterType === 'current') {
+      startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+      endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    } else if (filterType === 'previous') {
+      const prevMonth = today.getMonth() === 0 ? 11 : today.getMonth() - 1;
+      const prevYear = today.getMonth() === 0 ? today.getFullYear() - 1 : today.getFullYear();
+      startDate = new Date(prevYear, prevMonth, 1);
+      endDate = new Date(prevYear, prevMonth + 1, 0);
+    } else if (filterType === '3months') {
+      startDate = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+      endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    } else if (filterType === '6months') {
+      startDate = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+      endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    }
+
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
+
+    // Get generated recurring instances for this specific date range
+    const generatedExpenses = getGeneratedRecurringInstancesForDateRange(startDate, endDate);
+
+    // Combine both filtered and generated expenses, sorted by date (newest first)
+    const allExpenses = [...filteredExpenses, ...generatedExpenses];
+    return allExpenses.sort((a, b) => new Date(b.date) - new Date(a.date));
+  };
+
   // Get category breakdown for filtered expenses
   const getCategoryBreakdownByFilter = (filterType) => {
-    const filteredExpenses = getFilteredExpensesByDateRange(filterType);
+    const allExpenses = getFilteredExpensesForChartsRange(filterType);
     const breakdown = {};
 
-    filteredExpenses.forEach((expense) => {
+    allExpenses.forEach((expense) => {
       if (breakdown[expense.category]) {
         breakdown[expense.category] += expense.amount;
       } else {
@@ -834,7 +1538,8 @@ function App() {
   const getCategoryBreakdown = () => {
     const breakdown = {};
     
-    expenses.forEach((expense) => {
+    // Use the already-filtered expenses (excludes recurring master records, includes generated instances)
+    filteredExpenses.forEach((expense) => {
       if (breakdown[expense.category]) {
         breakdown[expense.category] += expense.amount;
       } else {
@@ -899,6 +1604,17 @@ function App() {
       
       try {
         if (currentUser) {
+          // Ensure user profile exists in Firestore
+          try {
+            await usersAPI.createOrUpdateProfile(currentUser.uid, {
+              email: currentUser.email,
+              displayName: currentUser.displayName,
+              photoURL: currentUser.photoURL
+            });
+          } catch (profileError) {
+            console.error('Error creating/updating user profile:', profileError);
+          }
+          
           // Load expenses and income from Firestore for logged-in user
           setExpensesLoading(true);
           const firestoreExpenses = await expensesAPI.getExpenses(currentUser.uid);
@@ -909,6 +1625,24 @@ function App() {
           
           setExpenses(validatedExpenses);
           setIncome(validatedIncome);
+          
+          // Load user's family group if they belong to one
+          try {
+            // Get user profile to check if they have a groupId
+            const userDoc = await import('firebase/firestore').then(({ getDoc, doc, getFirestore }) => 
+              getDoc(doc(getFirestore(), 'users', currentUser.uid))
+            );
+            
+            if (userDoc.exists() && userDoc.data().groupId) {
+              const groupId = userDoc.data().groupId;
+              const userRole = userDoc.data().role || 'member';
+              const group = await familyGroupsAPI.getGroup(groupId);
+              setUserGroup(group);
+              setUserRole(userRole);
+            }
+          } catch (groupError) {
+            console.log('No family group found for user');
+          }
         } else {
           // Load from localStorage for logged-out users
           let expenses = [];
@@ -927,6 +1661,8 @@ function App() {
 
           setExpenses(expenses);
           setIncome(income);
+          setUserGroup(null);
+          setUserRole(null);
         }
       } catch (error) {
         console.error('Error loading data:', error);
@@ -943,10 +1679,27 @@ function App() {
     return () => unsubscribe();
   }, []);
 
+  // Load family income when userGroup changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (userGroup && user) {
+      loadFamilyIncome();
+      loadFamilySharedExpenses();
+    }
+  }, [userGroup?.id, user?.uid]);
+
   // Sign in with Google
   const handleSignInWithGoogle = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      const currentUser = result.user;
+      
+      // Create or update user profile in Firestore
+      await usersAPI.createOrUpdateProfile(currentUser.uid, {
+        email: currentUser.email,
+        displayName: currentUser.displayName,
+        photoURL: currentUser.photoURL
+      });
     } catch (error) {
       console.error('Sign-in error:', error);
       setError('Failed to sign in: ' + error.message);
@@ -958,9 +1711,183 @@ function App() {
     try {
       await signOut(auth);
       setUser(null);
+      setUserGroup(null);
+      setUserRole(null);
+      setFamilyIncome([]);
+      setFamilySharedExpenses([]);
     } catch (error) {
       console.error('Logout error:', error);
       setError('Failed to logout: ' + error.message);
+    }
+  };
+
+  // Load family income from all group members
+  const loadFamilyIncome = async () => {
+    if (!userGroup || !userGroup.members) {
+      setFamilyIncome([]);
+      return;
+    }
+
+    try {
+      const allFamilyIncome = [];
+      
+      // Fetch income from eachmember
+      for (const member of userGroup.members) {
+        try {
+          const memberIncome = await incomeAPI.getIncome(member.userId);
+          // Include userId to track who earned this income
+          const incomeWithUserId = memberIncome.map(inc => ({
+            ...inc,
+            userId: member.userId
+          }));
+          allFamilyIncome.push(...incomeWithUserId);
+        } catch (error) {
+          console.log(`Could not load income for member ${member.name}:`, error.message);
+          // Continue with other members if one fails
+        }
+      }
+      
+      setFamilyIncome(allFamilyIncome);
+    } catch (error) {
+      console.error('Error loading family income:', error);
+      setFamilyIncome([]);
+    }
+  };
+
+  // Load family shared expenses when userGroup changes
+  const loadFamilySharedExpenses = async () => {
+    if (!userGroup || !userGroup.members) {
+      setFamilySharedExpenses([]);
+      return;
+    }
+
+    try {
+      const allSharedExpenses = [];
+      const seenIds = new Set(); // Track unique expenses by ID to avoid duplicates
+      
+      // Fetch expenses from each member
+      for (const member of userGroup.members) {
+        try {
+          const memberExpenses = await expensesAPI.getExpenses(member.userId);
+          
+          // Filter for shared expenses and avoid duplicates
+          memberExpenses.forEach(exp => {
+            if ((exp.type === 'shared' || !exp.type) && !seenIds.has(exp.id)) {
+              seenIds.add(exp.id);
+              // Include userId to track who created this expense
+              allSharedExpenses.push({
+                ...exp,
+                userId: member.userId
+              });
+            }
+          });
+        } catch (error) {
+          console.log(`Could not load expenses for member ${member.name}:`, error.message);
+          // Continue with other members if one fails
+        }
+      }
+      
+      setFamilySharedExpenses(allSharedExpenses);
+    } catch (error) {
+      console.error('Error loading family shared expenses:', error);
+      setFamilySharedExpenses([]);
+    }
+  };
+
+  // Create a new family group
+  const handleCreateGroup = async (groupName) => {
+    if (!user) {
+      setError('Please log in first');
+      return;
+    }
+
+    try {
+      console.log('Creating group:', groupName, 'for user:', user.uid);
+      setGroupLoading(true);
+      const result = await familyGroupsAPI.createGroup(user.uid, user.displayName || 'User', groupName);
+      console.log('Group created successfully:', result);
+      setUserGroup(result);
+      setUserRole('admin');
+      console.log('Showing success toast...');
+      showToast(`Family group "${groupName}" created successfully!`, 'success');
+      // Keep modal open so user can see group details immediately
+    } catch (error) {
+      console.error('Error creating group:', error);
+      console.error('Error message:', error.message);
+      console.error('Error code:', error.code);
+      showToast('Failed to create group: ' + error.message, 'error');
+    } finally {
+      setGroupLoading(false);
+    }
+  };
+
+  // Join a family group
+  const handleJoinGroup = async (inviteCode) => {
+    if (!user) {
+      setError('Please log in first');
+      return;
+    }
+
+    try {
+      console.log('Joining group with code:', inviteCode, 'for user:', user.uid);
+      setGroupLoading(true);
+      const result = await familyGroupsAPI.joinGroup(user.uid, user.displayName || 'User', inviteCode);
+      console.log('Group joined successfully:', result);
+      setUserGroup(result);
+      setUserRole('member');
+      console.log('Showing success toast...');
+      showToast(`Joined family group "${result.name}"!`, 'success');
+      // Keep modal open so user can see group details immediately
+    } catch (error) {
+      console.error('Error joining group:', error);
+      console.error('Error message:', error.message);
+      console.error('Error code:', error.code);
+      showToast('Failed to join group: ' + error.message, 'error');
+    } finally {
+      setGroupLoading(false);
+    }
+  };
+
+  // Leave family group
+  const handleLeaveGroup = async () => {
+    if (!user || !userGroup) return;
+
+    const confirmed = window.confirm('Are you sure you want to leave this family group?');
+    if (!confirmed) return;
+
+    try {
+      setGroupLoading(true);
+      await familyGroupsAPI.leaveGroup(user.uid, userGroup.id);
+      setUserGroup(null);
+      setUserRole(null);
+      showToast('Left family group successfully', 'success');
+    } catch (error) {
+      console.error('Error leaving group:', error);
+      showToast('Failed to leave group: ' + error.message, 'error');
+    } finally {
+      setGroupLoading(false);
+    }
+  };
+
+  // Generate new invite code
+  const handleGenerateCode = async () => {
+    if (!user || !userGroup || userRole !== 'admin') {
+      showToast('Only admin can generate new codes', 'error');
+      return;
+    }
+
+    try {
+      setGroupLoading(true);
+      const newCode = await familyGroupsAPI.generateNewCode(userGroup.id, user.uid);
+      // Reload group to get updated codes
+      const updatedGroup = await familyGroupsAPI.getGroup(userGroup.id);
+      setUserGroup(updatedGroup);
+      showToast(`New invite code generated: ${newCode}`, 'success');
+    } catch (error) {
+      console.error('Error generating code:', error);
+      showToast('Failed to generate code: ' + error.message, 'error');
+    } finally {
+      setGroupLoading(false);
     }
   };
 
@@ -970,68 +1897,113 @@ function App() {
         <Route
           path="/"
           element={
-            <Dashboard
-              expenses={expenses}
-              amount={amount}
-              setAmount={setAmount}
-              category={category}
-              setCategory={setCategory}
-              error={error}
-              setError={setError}
-              expenseDate={expenseDate}
-              setExpenseDate={setExpenseDate}
-              expenseDescription={expenseDescription}
-              setExpenseDescription={setExpenseDescription}
-              isExpenseRecurring={isExpenseRecurring}
-              setIsExpenseRecurring={setIsExpenseRecurring}
-              expenseFrequency={expenseFrequency}
-              setExpenseFrequency={setExpenseFrequency}
-              expenseEndDate={expenseEndDate}
-              setExpenseEndDate={setExpenseEndDate}
-              darkMode={darkMode}
-              setDarkMode={setDarkMode}
-              onAddExpense={handleAddExpense}
-              onDeleteExpense={handleDeleteExpense}
-              onEditExpense={handleEditExpense}
-              editingExpenseId={editingExpenseId}
-              formatCurrency={formatCurrency}
-              totalAmount={totalAmount}
-              getCategoryBreakdown={getCategoryBreakdown}
-              getCategoryBreakdownByFilter={getCategoryBreakdownByFilter}
-              user={user}
-              authLoading={authLoading}
-              onSignInWithGoogle={handleSignInWithGoogle}
-              onLogout={handleLogout}
-              income={income}
-              incomeAmount={incomeAmount}
-              setIncomeAmount={setIncomeAmount}
-              incomeSource={incomeSource}
-              setIncomeSource={setIncomeSource}
-              incomeDate={incomeDate}
-              setIncomeDate={setIncomeDate}
-              totalIncome={totalIncome}
-              onAddIncome={handleAddIncome}
-              onDeleteIncome={handleDeleteIncome}
-              onEditIncome={handleEditIncome}
-              editingIncomeId={editingIncomeId}
-              selectedMonth={selectedMonth}
-              selectedYear={selectedYear}
-              getFilteredIncomeTotal={getFilteredIncomeTotal}
-              getFilteredTotal={getFilteredTotal}
-              getRemainingBalance={getRemainingBalance}
-              getExpensesByWeek={getExpensesByWeek}
-              getMonthlyTrendData={getMonthlyTrendData}
-              getMonthlyInsight={getMonthlyInsight}
-              showExpenseForm={showExpenseForm}
-              setShowExpenseForm={setShowExpenseForm}
-              showIncomeForm={showIncomeForm}
-              setShowIncomeForm={setShowIncomeForm}
-              onCancelEdit={handleCancelEdit}
-              formatDate={formatDate}
-              expensesLoading={expensesLoading}
-              isSubmittingExpense={isSubmittingExpense}
-              isSubmittingIncome={isSubmittingIncome}
-            />
+            viewingFamilyDashboard && userGroup ? (
+              <FamilyDashboard
+                userGroup={userGroup}
+                userRole={userRole}
+                expenses={familySharedExpenses}
+                income={familyIncome}
+                user={user}
+                darkMode={darkMode}
+                setDarkMode={setDarkMode}
+                formatCurrency={formatCurrency}
+                formatDate={formatDate}
+                onSwitchToPersonal={() => setViewingFamilyDashboard(false)}
+                onEditExpense={handleEditExpense}
+                onDeleteExpense={handleDeleteExpense}
+                onEditIncome={handleEditIncome}
+                onDeleteIncome={handleDeleteIncome}
+                onAddExpense={handleAddExpense}
+                onAddIncome={handleAddIncome}
+              />
+            ) : (
+              <Dashboard
+                expenses={expenses}
+                amount={amount}
+                setAmount={setAmount}
+                category={category}
+                setCategory={setCategory}
+                error={error}
+                setError={setError}
+                expenseDate={expenseDate}
+                setExpenseDate={setExpenseDate}
+                expenseDescription={expenseDescription}
+                setExpenseDescription={setExpenseDescription}
+                isExpenseRecurring={isExpenseRecurring}
+                setIsExpenseRecurring={setIsExpenseRecurring}
+                expenseFrequency={expenseFrequency}
+                setExpenseFrequency={setExpenseFrequency}
+                expenseEndDate={expenseEndDate}
+                setExpenseEndDate={setExpenseEndDate}
+                expenseType={expenseType}
+                setExpenseType={setExpenseType}
+                isExpenseSplit={isExpenseSplit}
+                setIsExpenseSplit={setIsExpenseSplit}
+                expenseSplitMembers={expenseSplitMembers}
+                setExpenseSplitMembers={setExpenseSplitMembers}
+                darkMode={darkMode}
+                setDarkMode={setDarkMode}
+                onAddExpense={handleAddExpense}
+                onDeleteExpense={handleDeleteExpense}
+                onEditExpense={handleEditExpense}
+                editingExpenseId={editingExpenseId}
+                formatCurrency={formatCurrency}
+                totalAmount={totalAmount}
+                getCategoryBreakdown={getCategoryBreakdown}
+                getCategoryBreakdownByFilter={getCategoryBreakdownByFilter}
+                user={user}
+                authLoading={authLoading}
+                onSignInWithGoogle={handleSignInWithGoogle}
+                onLogout={handleLogout}
+                income={income}
+                incomeAmount={incomeAmount}
+                setIncomeAmount={setIncomeAmount}
+                incomeSource={incomeSource}
+                setIncomeSource={setIncomeSource}
+                incomeDate={incomeDate}
+                setIncomeDate={setIncomeDate}
+                totalIncome={totalIncome}
+                onAddIncome={handleAddIncome}
+                onDeleteIncome={handleDeleteIncome}
+                onEditIncome={handleEditIncome}
+                editingIncomeId={editingIncomeId}
+                selectedMonth={selectedMonth}
+                selectedYear={selectedYear}
+                getFilteredIncomeTotal={getFilteredIncomeTotal}
+                getFilteredTotal={getFilteredTotal}
+                getRemainingBalance={getRemainingBalance}
+                getExpensesByWeek={getExpensesByWeek}
+                getMonthlyTrendData={getMonthlyTrendData}
+                getMonthlyInsight={getMonthlyInsight}
+                getYearlyTotalIncome={getYearlyTotalIncome}
+                getMonthlyIncomeBreakdown={getMonthlyIncomeBreakdown}
+                getFilteredExpensesForChartsRange={getFilteredExpensesForChartsRange}
+                showExpenseForm={showExpenseForm}
+                setShowExpenseForm={setShowExpenseForm}
+                showIncomeForm={showIncomeForm}
+                setShowIncomeForm={setShowIncomeForm}
+                onCancelEdit={handleCancelEdit}
+                formatDate={formatDate}
+                expensesLoading={expensesLoading}
+                isSubmittingExpense={isSubmittingExpense}
+                isSubmittingIncome={isSubmittingIncome}
+                userGroup={userGroup}
+                userRole={userRole}
+                onCreateGroup={handleCreateGroup}
+                onJoinGroup={handleJoinGroup}
+                onLeaveGroup={handleLeaveGroup}
+                onGenerateCode={handleGenerateCode}
+                groupLoading={groupLoading}
+                showGroupManager={showGroupManager}
+                setShowGroupManager={setShowGroupManager}
+                viewingFamilyDashboard={viewingFamilyDashboard}
+                setViewingFamilyDashboard={setViewingFamilyDashboard}
+                showRecurringEditScope={showRecurringEditScope}
+                setShowRecurringEditScope={setShowRecurringEditScope}
+                recurringEditInstance={recurringEditInstance}
+                onRecurringEditScopeSelect={handleRecurringEditScopeSelect}
+              />
+            )
           }
         />
         <Route
@@ -1054,6 +2026,7 @@ function App() {
               formatDate={formatDate}
               getFilteredExpenses={getFilteredExpenses}
               getFilteredTotal={getFilteredTotal}
+              getAllTimeExpensesTotal={getAllTimeExpensesTotal}
               getExpensesByWeek={getExpensesByWeek}
               exportToCSV={exportToCSV}
               user={user}

@@ -19,6 +19,7 @@ function ExpensesPage({
   formatDate,
   getFilteredExpenses,
   getFilteredTotal,
+  getAllTimeExpensesTotal,
   getExpensesByWeek,
   exportToCSV,
   user,
@@ -42,6 +43,7 @@ function ExpensesPage({
       'Entertainment': '🎬',
       'Vehicle': '🚗',
       'Medical': '⚕️',
+      'EMI': '💳',
       'Others': '📦'
     };
     return icons[category] || '📌';
@@ -55,7 +57,7 @@ function ExpensesPage({
   
   const filteredExpenses = getFilteredExpenses();
   const filteredTotal = getFilteredTotal();
-  const totalAmount = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  const totalAmount = getAllTimeExpensesTotal ? getAllTimeExpensesTotal() : 0;
   
   const sortedExpenses = [...filteredExpenses].sort((a, b) => b.id - a.id);
   const visibleExpenses = sortedExpenses.slice(0, visibleCount);
@@ -166,9 +168,13 @@ function ExpensesPage({
             </div>
 
             <div className="header-right">
-              <Link to="/" className="nav-link">
-                Add Expense
-              </Link>
+              <button 
+                className="nav-link back-btn" 
+                onClick={() => navigate(-1)}
+                title="Go back"
+              >
+                ← Back
+              </button>
             </div>
           </div>
         </div>
