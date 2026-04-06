@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import AdminTools from './AdminTools';
 
 function FamilyDashboard({
   userGroup,
   userRole,
   expenses,
+  personalExpenses,
   income,
   user,
   darkMode,
@@ -31,10 +33,13 @@ function FamilyDashboard({
   }
 
   // Filter to only shared expenses for family dashboard
-  const sharedExpenses = expenses.filter(exp => exp.type === 'shared' || !exp.type); // Default to shared for backward compatibility
+  // expenses prop (familySharedExpenses) already contains only shared expenses
+  const sharedExpenses = expenses || [];
 
-  // Calculate total expenses and income
-  const totalFamilyExpenses = sharedExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+  // Calculate total expenses from shared and personal
+  const totalSharedExpenses = sharedExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+  const totalPersonalExpenses = (personalExpenses || []).reduce((sum, exp) => sum + (exp.amount || 0), 0);
+  const totalFamilyExpenses = totalSharedExpenses + totalPersonalExpenses;
   const totalFamilyIncome = income.reduce((sum, inc) => sum + (inc.amount || 0), 0);
   const familyBalance = totalFamilyIncome - totalFamilyExpenses;
 
@@ -57,8 +62,8 @@ function FamilyDashboard({
 
     // Add shared expenses
     sharedExpenses.forEach(exp => {
-      if (contributions[exp.userId]) {
-        contributions[exp.userId].spent += exp.amount || 0;
+      if (contributions[exp.createdBy]) {
+        contributions[exp.createdBy].spent += exp.amount || 0;
       }
     });
 
@@ -77,6 +82,39 @@ function FamilyDashboard({
     });
 
     return sortedBySpending;
+  };
+
+  const getMemberPersonalTotals = () => {
+    const personalTotals = {};
+    members.forEach(member => {
+      personalTotals[member.userId] = {
+        id: member.userId,
+        name: member.name,
+        personalTotal: 0,
+        count: 0,
+        percentage: 0
+      };
+    });
+
+    // Add personal expenses
+    (personalExpenses || []).forEach(exp => {
+      if (personalTotals[exp.createdBy]) {
+        personalTotals[exp.createdBy].personalTotal += exp.amount || 0;
+        personalTotals[exp.createdBy].count += 1;
+      }
+    });
+
+    // Calculate percentage
+    const totalPersonal = Object.values(personalTotals).reduce((sum, member) => sum + member.personalTotal, 0);
+    const sortedByPersonal = Object.values(personalTotals)
+      .filter(member => member.personalTotal > 0)
+      .sort((a, b) => b.personalTotal - a.personalTotal);
+    
+    sortedByPersonal.forEach(member => {
+      member.percentage = totalPersonal > 0 ? ((member.personalTotal / totalPersonal) * 100).toFixed(1) : 0;
+    });
+
+    return sortedByPersonal;
   };
 
   // Get category breakdown
@@ -123,10 +161,10 @@ function FamilyDashboard({
         type: 'expense',
         category: exp.category,
         amount: exp.amount,
-        memberName: members.find(m => m.userId === exp.userId)?.name || 'Unknown',
+        memberName: members.find(m => m.userId === exp.createdBy)?.name || 'Unknown',
         date: exp.date,
         description: exp.description,
-        userId: exp.userId
+        userId: exp.createdBy
       });
     });
 
@@ -181,7 +219,7 @@ function FamilyDashboard({
       transactions.push(...sharedExpenses.map(exp => ({
         ...exp,
         type: 'expense',
-        memberName: members.find(m => m.userId === exp.userId)?.name || 'Unknown'
+        memberName: members.find(m => m.userId === exp.createdBy)?.name || 'Unknown'
       })));
     }
 
@@ -198,16 +236,19 @@ function FamilyDashboard({
 
   // Get top spender
   const getTopSpender = () => {
-    const spenders = {};
+    const topSpenders = [];
     sharedExpenses.forEach(exp => {
-      if (!spenders[exp.userId]) {
-        spenders[exp.userId] = { amount: 0, name: '' };
-      }
-      spenders[exp.userId].amount += exp.amount || 0;
-      spenders[exp.userId].name = members.find(m => m.userId === exp.userId)?.name || 'Unknown';
+      const creatorName = members.find(m => m.userId === exp.createdBy)?.name || 'Unknown';
+      const category = exp.category || 'Other';
+      topSpenders.push({
+        name: creatorName,
+        category,
+        amount: exp.amount || 0,
+        id: exp.createdBy
+      });
     });
 
-    const topSpender = Object.values(spenders).sort((a, b) => b.amount - a.amount)[0];
+    const topSpender = topSpenders.sort((a, b) => b.amount - a.amount)[0];
     return topSpender || { amount: 0, name: 'N/A' };
   };
 
@@ -235,17 +276,17 @@ function FamilyDashboard({
     
     // Calculate stats for each member
     sharedExpenses.forEach(exp => {
-      if (!memberStats[exp.userId]) {
-        memberStats[exp.userId] = {
-          name: members.find(m => m.userId === exp.userId)?.name || 'Unknown',
+      if (!memberStats[exp.createdBy]) {
+        memberStats[exp.createdBy] = {
+          name: members.find(m => m.userId === exp.createdBy)?.name || 'Unknown',
           total: 0,
           count: 0,
           amounts: []
         };
       }
-      memberStats[exp.userId].total += exp.amount || 0;
-      memberStats[exp.userId].count += 1;
-      memberStats[exp.userId].amounts.push(exp.amount || 0);
+      memberStats[exp.createdBy].total += exp.amount || 0;
+      memberStats[exp.createdBy].count += 1;
+      memberStats[exp.createdBy].amounts.push(exp.amount || 0);
     });
 
     // Calculate average and identify unusual patterns
@@ -288,13 +329,13 @@ function FamilyDashboard({
   const getSpendingComparison = () => {
     const comparison = members.map(member => {
       const memberSpending = sharedExpenses
-        .filter(exp => exp.userId === member.userId)
+        .filter(exp => exp.createdBy === member.userId)
         .reduce((sum, exp) => sum + (exp.amount || 0), 0);
       
       return {
         name: member.name,
         spending: parseFloat(memberSpending.toFixed(2)),
-        percentage: totalFamilyExpenses > 0 ? ((memberSpending / totalFamilyExpenses) * 100).toFixed(1) : 0
+        percentage: totalSharedExpenses > 0 ? ((memberSpending / totalSharedExpenses) * 100).toFixed(1) : 0
       };
     }).sort((a, b) => b.spending - a.spending);
 
@@ -313,7 +354,7 @@ function FamilyDashboard({
     // Process split expenses
     sharedExpenses.forEach(exp => {
       if (exp.isSplit && exp.splitMembers && exp.splitMembers.length > 0) {
-        const payer = exp.userId;
+        const payer = exp.createdBy;
         const splitCount = exp.splitMembers.length + 1; // Includes payer
         const amountPerPerson = (exp.amount / splitCount).toFixed(2);
 
@@ -371,6 +412,7 @@ function FamilyDashboard({
   };
 
   const memberContributions = getMemberContributions();
+  const memberPersonalTotals = getMemberPersonalTotals();
   const categoryBreakdown = getCategoryBreakdown();
   const incomeSourceBreakdown = getIncomeSourceBreakdown();
   const recentTransactions = getFilteredTransactions();
@@ -433,7 +475,7 @@ function FamilyDashboard({
           <div className="card-icon">💸</div>
           <div className="card-content">
             <h3 className="card-title">Total Shared Expenses</h3>
-            <div className="card-amount">{formatCurrency(totalFamilyExpenses)}</div>
+            <div className="card-amount">{formatCurrency(totalSharedExpenses)}</div>
             <p className="card-detail">{sharedExpenses.length} shared entries</p>
           </div>
         </div>
@@ -496,6 +538,33 @@ function FamilyDashboard({
             )}
           </div>
         </div>
+
+        {/* Personal Expense Summary */}
+        {memberPersonalTotals.length > 0 && (
+          <div className="family-card personal-expense-summary-card">
+            <h2 className="card-heading">💳 Personal Expense Summary</h2>
+            <div className="personal-totals-container">
+              {memberPersonalTotals.map((member, idx) => (
+                <div key={member.id} className="personal-total-card">
+                  <div className="member-avatar-small" style={{ backgroundColor: COLORS[idx % COLORS.length] }}>
+                    {member.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="personal-details">
+                    <div className="member-name-small">{member.name}</div>
+                    <div className="personal-amount">{formatCurrency(member.personalTotal)}</div>
+                    <div className="personal-percentage">{member.count} expense{member.count !== 1 ? 's' : ''}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="personal-summary-footer">
+              <div className="total-personal">
+                <span>Total Personal Expenses:</span>
+                <span className="total-amount">{formatCurrency(totalPersonalExpenses)}</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Category Breakdown */}
         {categoryBreakdown.length > 0 && (
@@ -655,7 +724,10 @@ function FamilyDashboard({
                 <div className="transaction-content">
                   <div className="transaction-header">
                     <div className="transaction-title">
-                      {transaction.category || transaction.source || 'Transaction'}
+                      {transaction.memberName && transaction.type === 'expense' 
+                        ? `${transaction.memberName} spent ₹${transaction.amount.toFixed(2)} on ${transaction.category || 'Transaction'}`
+                        : transaction.category || transaction.source || 'Transaction'
+                      }
                     </div>
                     <div className={`transaction-amount ${transaction.type}`}>
                       {transaction.type === 'expense' ? '-' : '+'}
@@ -787,6 +859,14 @@ function FamilyDashboard({
           </p>
         </div>
       </div>
+
+      {/* Admin Tools - Only visible to group admins */}
+      <AdminTools
+        currentUser={user}
+        members={userGroup.members || []}
+        groupId={userGroup.id}
+        isAdmin={userRole === 'admin'}
+      />
     </div>
   );
 }

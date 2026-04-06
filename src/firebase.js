@@ -182,6 +182,8 @@ export const usersAPI = {
 //   date: string (required, ISO format: "YYYY-MM-DD", not in future)
 //   description: string (optional)
 //   type: string (required, enum: "personal" | "shared")
+//   createdBy: string (required, creator's UID - identifies expense owner)
+//   groupId: string (required for type='shared', null/undefined for type='personal')
 //   isSplit: boolean (required, true only if type='shared')
 //   splitMembers: string[] (array of userIds, empty if not split)
 //   isRecurring: boolean (required)
@@ -191,10 +193,17 @@ export const usersAPI = {
 //   updatedAt: timestamp (auto-set)
 // }
 // 
+// Storage Model:
+// - Each expense stored ONLY in creator's collection (/users/{createdBy}/expenses)
+// - Personal expenses: visible only to creator
+// - Shared expenses: visible to creator + all group members (via groupId lookup)
+// - NO DUPLICATION: groups query creator's collection for shared expenses by groupId
+//
 // Common Queries:
-// - All expenses: getDocs(collection(db, 'users', userId, 'expenses'))
+// - User's personal: where('type', '==', 'personal').where('createdBy', '==', userId)
+// - User's all: getDocs(collection(db, 'users', userId, 'expenses'))
+// - Family shared: fetch expenses where type='shared' and groupId=userGroup.id from each member
 // - By date range: where('date', '>=', '2026-04-01').where('date', '<=', '2026-04-30')
-// - Shared only: where('type', '==', 'shared')
 // - By category: where('category', '==', 'Groceries')
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -220,6 +229,10 @@ export const expensesAPI = {
   },
 
   // Get all expenses for a user
+  // Returns all expenses from user's collection (personal + shared they created)
+  // Does NOT return shared expenses created by other users (stored in their collections)
+  // @param userId - Firebase Auth UID
+  // @returns Promise<Array> - Expenses where createdBy=userId (personal or shared)
   getExpenses: async (userId) => {
     try {
       const userExpensesRef = collection(db, 'users', userId, 'expenses');
@@ -260,91 +273,101 @@ export const expensesAPI = {
     }
   },
 
-  // Add a shared expense to multiple members' collections
-  // @param creatorUserId - UID of the user creating the expense
-  // @param memberUserIds - Array of all group member UIDs (including creator)
-  // @param expenseData - Object with amount, category, date, description, type, isSplit, splitMembers, etc.
-  // @returns Promise<Object> - Created expense with ID
-  addSharedExpense: async (creatorUserId, memberUserIds, expenseData) => {
-    try {
-      // First, add to creator's collection
-      const creatorExpensesRef = collection(db, 'users', creatorUserId, 'expenses');
-      const docRef = await addDoc(creatorExpensesRef, {
-        ...expenseData,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-      const expenseId = docRef.id;
-      const savedExpense = { id: expenseId, ...expenseData };
+  // Get family shared expenses for a group
+  // Fetches shared expenses (type='shared', groupId matches) from all group members' collections
+  // Each expense stored only once in creator's collection, so this fetches from each member
+  // @param groupMembers - Array of {userId, name} objects
+  // @param groupId - The family group ID
+  // @returns Promise<Array> - Array of shared expenses with createdBy field
+  getSharedExpensesForGroup: async (groupMembers, groupId) => {
+    if (!groupMembers || !groupId) {
+      return [];
+    }
 
-      // Then, add to all other members' collections
-      const otherMembers = memberUserIds.filter(id => id !== creatorUserId);
-      for (const memberId of otherMembers) {
+    try {
+      const allSharedExpenses = [];
+      const seenIds = new Set(); // Track unique expenses to avoid duplicates in case of errors
+
+      // Fetch expenses from each member's collection
+      for (const member of groupMembers) {
         try {
-          const memberExpensesRef = collection(db, 'users', memberId, 'expenses');
-          await addDoc(memberExpensesRef, {
-            ...expenseData,
-            id: expenseId, // Use same ID for consistency
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
+          const memberExpenses = await expensesAPI.getExpenses(member.userId);
+
+          // Filter for shared expenses of this group
+          memberExpenses.forEach(exp => {
+            if (exp.type === 'shared' && exp.groupId === groupId && !seenIds.has(exp.id)) {
+              seenIds.add(exp.id);
+              // Include createdBy to track who created this expense
+              allSharedExpenses.push({
+                ...exp,
+                createdBy: exp.createdBy || member.userId // Fallback for backward compatibility
+              });
+            }
           });
         } catch (error) {
-          console.warn(`Failed to add shared expense to member ${memberId}:`, error);
-          // Continue with other members even if one fails
+          console.warn(`Could not load expenses from member ${member.userId}:`, error.message);
+          // Continue with other members if one fails
         }
       }
 
-      return savedExpense;
+      return allSharedExpenses;
     } catch (error) {
-      console.error('Error adding shared expense:', error);
-      throw error;
+      console.error('Error loading family shared expenses:', error);
+      return [];
     }
   },
 
-  // Update a shared expense across all members' collections
-  // @param memberUserIds - Array of all group member UIDs
-  // @param expenseId - ID of the expense to update
-  // @param expenseData - Updated expense data
-  updateSharedExpense: async (memberUserIds, expenseId, expenseData) => {
+  // Get ALL family expenses (shared + personal from all members)
+  // Used for family dashboard to calculate total spending (no double counting)
+  // @param groupMembers - Array of {userId, name} objects
+  // @param groupId - The family group ID
+  // @returns Promise<Array> - All expenses from family members
+  getAllFamilyExpenses: async (groupMembers, groupId) => {
+    if (!groupMembers || !groupId) {
+      return { shared: [], personal: [] };
+    }
+
     try {
-      // Update expense for each member
-      for (const memberId of memberUserIds) {
+      const sharedExpenses = [];
+      const personalExpenses = [];
+      const seenSharedIds = new Set();
+      const seenPersonalIds = new Set();
+
+      // Fetch expenses from each member's collection
+      for (const member of groupMembers) {
         try {
-          const expenseRef = doc(db, 'users', memberId, 'expenses', expenseId);
-          await updateDoc(expenseRef, {
-            ...expenseData,
-            updatedAt: serverTimestamp(),
+          const memberExpenses = await expensesAPI.getExpenses(member.userId);
+
+          memberExpenses.forEach(exp => {
+            // Collect shared expenses (by groupId or for backward compatibility, any shared expense)
+            // Check: type is 'shared' AND (groupId matches OR groupId is not set/defined)
+            if (exp.type === 'shared' && (exp.groupId === groupId || !exp.groupId) && !seenSharedIds.has(exp.id)) {
+              seenSharedIds.add(exp.id);
+              sharedExpenses.push({
+                ...exp,
+                createdBy: exp.createdBy || member.userId,
+                groupId: exp.groupId || groupId // Set groupId if missing
+              });
+            }
+            // Collect personal expenses from this member
+            else if (exp.type === 'personal' && !seenPersonalIds.has(exp.id)) {
+              seenPersonalIds.add(exp.id);
+              personalExpenses.push({
+                ...exp,
+                createdBy: exp.createdBy || member.userId
+              });
+            }
           });
         } catch (error) {
-          console.warn(`Failed to update shared expense for member ${memberId}:`, error);
-          // Continue with other members even if one fails
+          console.warn(`Could not load expenses from member ${member.userId}:`, error.message);
+          // Continue with other members if one fails
         }
       }
-      return { id: expenseId, ...expenseData };
-    } catch (error) {
-      console.error('Error updating shared expense:', error);
-      throw error;
-    }
-  },
 
-  // Delete a shared expense from all members' collections
-  // @param memberUserIds - Array of all group member UIDs
-  // @param expenseId - ID of the expense to delete
-  deleteSharedExpense: async (memberUserIds, expenseId) => {
-    try {
-      // Delete expense for each member
-      for (const memberId of memberUserIds) {
-        try {
-          const expenseRef = doc(db, 'users', memberId, 'expenses', expenseId);
-          await deleteDoc(expenseRef);
-        } catch (error) {
-          console.warn(`Failed to delete shared expense for member ${memberId}:`, error);
-          // Continue with other members even if one fails
-        }
-      }
+      return { shared: sharedExpenses, personal: personalExpenses };
     } catch (error) {
-      console.error('Error deleting shared expense:', error);
-      throw error;
+      console.error('Error loading all family expenses:', error);
+      return { shared: [], personal: [] };
     }
   },
 };
@@ -981,6 +1004,192 @@ export const familyGroupsAPI = {
     } catch (error) {
       console.error('Error changing role:', error);
       throw error;
+    }
+  }
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DATA CLEANUP API
+// ══════════════════════════════════════════════════════════════════════════════
+// Utilities for cleaning up duplicated data from old model (pre-single-storage)
+// The old model duplicated shared expenses across all family members' collections
+// The new model stores shared expenses only in the creator's collection
+// 
+// These functions identify and remove duplicate shared expenses across users
+// ══════════════════════════════════════════════════════════════════════════════
+
+export const dataCleanupAPI = {
+  /**
+   * Clean up duplicated shared expenses across a family group
+   * Identifies shared expenses that appear in multiple users' collections
+   * Keeps the master copy (in creator's collection where createdBy === userId)
+   * Deletes all duplicate copies from other users' collections
+   * 
+   * @param {Array} groupMembers - Array of {userId, name} objects
+   * @param {String} groupId - The family group ID
+   * @returns {Promise<Object>} Report: { duplicatesFound, duplicatesRemoved, errors }
+   */
+  cleanupDuplicatedSharedExpenses: async (groupMembers, groupId) => {
+    const report = {
+      duplicatesFound: 0,
+      duplicatesRemoved: 0,
+      errors: [],
+      details: []
+    };
+
+    try {
+      if (!groupMembers || !groupId) {
+        report.errors.push('Invalid groupMembers or groupId');
+        return report;
+      }
+
+      // Map expense IDs to all users who have them
+      const expenseToUsers = {};
+
+      // Step 1: Scan all users' collections for shared expenses
+      for (const member of groupMembers) {
+        try {
+          const memberExpenses = await expensesAPI.getExpenses(member.userId);
+
+          memberExpenses.forEach(exp => {
+            if (exp.type === 'shared' && exp.groupId === groupId) {
+              if (!expenseToUsers[exp.id]) {
+                expenseToUsers[exp.id] = {
+                  expense: exp,
+                  usersWithCopy: []
+                };
+              }
+              expenseToUsers[exp.id].usersWithCopy.push({
+                userId: member.userId,
+                userName: member.name,
+                isCreator: exp.createdBy === member.userId
+              });
+            }
+          });
+        } catch (error) {
+          const errorMsg = `Failed to scan ${member.userId}'s collection: ${error.message}`;
+          report.errors.push(errorMsg);
+          console.warn(errorMsg);
+        }
+      }
+
+      // Step 2: Identify and remove duplicates
+      for (const [expenseId, data] of Object.entries(expenseToUsers)) {
+        const { expense, usersWithCopy } = data;
+
+        // If more than one user has this expense, it's a duplicate
+        if (usersWithCopy.length > 1) {
+          report.duplicatesFound++;
+
+          // Identify the creator
+          const creatorInfo = usersWithCopy.find(u => u.isCreator);
+          const masterUserId = creatorInfo?.userId || expense.createdBy;
+
+          // Delete from non-master users
+          for (const userInfo of usersWithCopy) {
+            if (userInfo.userId !== masterUserId) {
+              try {
+                await expensesAPI.deleteExpense(userInfo.userId, expenseId);
+                report.duplicatesRemoved++;
+
+                report.details.push({
+                  expenseId,
+                  expenseName: `${expense.category} - ₹${expense.amount}`,
+                  deletedFromUser: userInfo.userName,
+                  keptInUser: creatorInfo?.userName || 'System',
+                  date: expense.date
+                });
+              } catch (error) {
+                const errorMsg = `Failed to delete ${expenseId} from ${userInfo.userName}: ${error.message}`;
+                report.errors.push(errorMsg);
+                console.error(errorMsg);
+              }
+            }
+          }
+        }
+      }
+
+      console.log('Cleanup Report:', report);
+      return report;
+    } catch (error) {
+      report.errors.push(`Critical error during cleanup: ${error.message}`);
+      console.error('Data cleanup failed:', error);
+      return report;
+    }
+  },
+
+  /**
+   * Scan for duplicate shared expenses without deleting
+   * Returns a detailed report of duplicates found
+   * 
+   * @param {Array} groupMembers - Array of {userId, name} objects
+   * @param {String} groupId - The family group ID
+   * @returns {Promise<Object>} Report with duplicate details
+   */
+  auditDuplicatedSharedExpenses: async (groupMembers, groupId) => {
+    const report = {
+      duplicatesFound: 0,
+      errors: [],
+      duplicates: []
+    };
+
+    try {
+      if (!groupMembers || !groupId) {
+        report.errors.push('Invalid groupMembers or groupId');
+        return report;
+      }
+
+      // Map expense IDs to all users who have them
+      const expenseToUsers = {};
+
+      // Scan all users' collections
+      for (const member of groupMembers) {
+        try {
+          const memberExpenses = await expensesAPI.getExpenses(member.userId);
+
+          memberExpenses.forEach(exp => {
+            if (exp.type === 'shared' && exp.groupId === groupId) {
+              if (!expenseToUsers[exp.id]) {
+                expenseToUsers[exp.id] = {
+                  expense: exp,
+                  usersWithCopy: []
+                };
+              }
+              expenseToUsers[exp.id].usersWithCopy.push({
+                userId: member.userId,
+                userName: member.name,
+                isCreator: exp.createdBy === member.userId
+              });
+            }
+          });
+        } catch (error) {
+          report.errors.push(`Failed to scan ${member.userId}'s collection: ${error.message}`);
+        }
+      }
+
+      // Identify duplicates
+      for (const [expenseId, data] of Object.entries(expenseToUsers)) {
+        const { expense, usersWithCopy } = data;
+
+        if (usersWithCopy.length > 1) {
+          report.duplicatesFound++;
+          report.duplicates.push({
+            expenseId,
+            category: expense.category,
+            amount: expense.amount,
+            date: expense.date,
+            copiesFound: usersWithCopy.length,
+            usersWithCopy: usersWithCopy,
+            creator: expense.createdBy
+          });
+        }
+      }
+
+      return report;
+    } catch (error) {
+      report.errors.push(`Critical error during audit: ${error.message}`);
+      console.error('Data audit failed:', error);
+      return report;
     }
   }
 };

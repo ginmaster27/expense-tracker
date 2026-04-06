@@ -27,8 +27,6 @@ function App() {
   const [expenseFrequency, setExpenseFrequency] = useState('monthly');
   const [expenseEndDate, setExpenseEndDate] = useState('');
   const [expenseType, setExpenseType] = useState('shared'); // 'personal' | 'shared' (defaults to shared)
-  const [isExpenseSplit, setIsExpenseSplit] = useState(false); // Mark if expense is to be split
-  const [expenseSplitMembers, setExpenseSplitMembers] = useState([]); // Members to split with
 
   const [darkMode, setDarkMode] = useState(() => {
     try {
@@ -50,6 +48,8 @@ function App() {
   
   // Family shared expenses state
   const [familySharedExpenses, setFamilySharedExpenses] = useState([]);
+  // Family personal expenses (all members) - for family total calculation
+  const [familyPersonalExpenses, setFamilyPersonalExpenses] = useState([]);
   const [incomeSource, setIncomeSource] = useState('');
   const [incomeDate, setIncomeDate] = useState(() => {
     const today = new Date();
@@ -230,9 +230,7 @@ function App() {
         date: expenseDate,
         description: expenseDescription.trim(),
         isRecurring: isExpenseRecurring,
-        type: expenseType, // 'personal' | 'shared'
-        isSplit: isExpenseSplit,
-        splitMembers: isExpenseSplit ? expenseSplitMembers : [] // Array of member IDs
+        type: expenseType // 'personal' | 'shared'
       };
 
       // Add recurring-specific fields if marking as recurring
@@ -266,10 +264,14 @@ function App() {
             const overrideData = {
               ...newExpenseData,
               isRecurring: false, // Make it a one-time expense
-              frequency: undefined,
-              endDate: undefined,
-              overriddenDate: dateStr // Mark which date it overrides
+              overriddenDate: dateStr, // Mark which date it overrides
+              createdBy: masterRecord.createdBy || user.uid
             };
+            
+            // Only add groupId for shared expenses
+            if (newExpenseData.type === 'shared') {
+              overrideData.groupId = masterRecord.groupId || userGroup?.id;
+            }
             
             // Generate a unique ID for this override
             const overrideId = `${masterId}-override-${dateStr}`;
@@ -338,8 +340,14 @@ function App() {
               isRecurring: true,
               frequency: newExpenseData.frequency || masterRecord.frequency,
               endDate: newExpenseData.endDate || masterRecord.endDate,
-              type: newExpenseData.type
+              type: newExpenseData.type,
+              createdBy: masterRecord.createdBy || user.uid
             };
+            
+            // Only add groupId for shared expenses
+            if (newExpenseData.type === 'shared') {
+              newRecurringRule.groupId = masterRecord.groupId || userGroup?.id;
+            }
             
             // Update in all member collections if shared
             const updatedExpenses = expenses.map(exp => 
@@ -364,25 +372,32 @@ function App() {
           const expenseToUpdate = expenses.find(exp => exp.id === editingExpenseId);
           const isRecurringUpdate = expenseToUpdate?.isRecurring;
           
+          // Prepare complete expense data with metadata preserved
+          const expenseDataToSave = {
+            ...newExpenseData,
+            createdBy: expenseToUpdate?.createdBy || user?.uid
+          };
+          
+          // Only add groupId for shared expenses
+          if (newExpenseData.type === 'shared') {
+            expenseDataToSave.groupId = expenseToUpdate?.groupId || userGroup?.id;
+          }
+          
           if (user) {
-            // Check if it's a shared expense with a family group
-            if (newExpenseData.type === 'shared' && userGroup && userGroup.members) {
-              const memberIds = userGroup.members.map(m => m.userId);
-              await expensesAPI.updateSharedExpense(memberIds, editingExpenseId, newExpenseData);
-            } else {
-              await expensesAPI.updateExpense(user.uid, editingExpenseId, newExpenseData);
-            }
+            // Update in database
+            await expensesAPI.updateExpense(user.uid, editingExpenseId, expenseDataToSave);
           } else {
+            // Update localStorage if user is not logged in
             const updated = expenses.map(exp => 
-              exp.id === editingExpenseId ? { ...exp, ...newExpenseData } : exp
+              exp.id === editingExpenseId ? { id: editingExpenseId, ...expenseDataToSave } : exp
             );
             setExpenses(updated);
             localStorage.setItem('expenses', JSON.stringify(updated));
           }
           
-          // Update in state
+          // Update local state with complete data
           setExpenses(expenses.map(exp => 
-            exp.id === editingExpenseId ? { id: editingExpenseId, ...newExpenseData } : exp
+            exp.id === editingExpenseId ? { id: editingExpenseId, ...expenseDataToSave } : exp
           ));
           
           const updateType = isRecurringUpdate ? 'Recurring expense' : 'Expense';
@@ -395,14 +410,17 @@ function App() {
         // Add new expense
         if (user) {
           // For both recurring and non-recurring: store the rule, not individual instances
-          let savedExpense;
-          if (newExpenseData.type === 'shared' && userGroup && userGroup.members) {
-            const memberIds = userGroup.members.map(m => m.userId);
-            savedExpense = await expensesAPI.addSharedExpense(user.uid, memberIds, newExpenseData);
-          } else {
-            // Save to Firestore if user is logged in (personal expense)
-            savedExpense = await expensesAPI.addExpense(user.uid, newExpenseData);
+          const expenseDataToSave = {
+            ...newExpenseData,
+            createdBy: user.uid
+          };
+          
+          // Only add groupId for shared expenses
+          if (newExpenseData.type === 'shared') {
+            expenseDataToSave.groupId = userGroup?.id;
           }
+          
+          const savedExpense = await expensesAPI.addExpense(user.uid, expenseDataToSave);
           setExpenses([...expenses, savedExpense]);
         } else {
           // Save to localStorage if user is not logged in
@@ -423,8 +441,6 @@ function App() {
       setExpenseFrequency('monthly');
       setExpenseEndDate('');
       setExpenseType('shared');
-      setIsExpenseSplit(false);
-      setExpenseSplitMembers([]);
       const currentDate = new Date();
       setExpenseDate(currentDate.toISOString().split('T')[0]);
       setError('');
@@ -473,15 +489,15 @@ function App() {
           if (masterRecord && user) {
             // Update master record to exclude this date
             const excludedDates = [...(masterRecord.excludedDates || []), excludedDate];
-            const updatedMaster = { ...masterRecord, excludedDates };
+            const updatedMaster = { 
+              ...masterRecord, 
+              excludedDates,
+              createdBy: masterRecord.createdBy || user.uid,
+              groupId: masterRecord.groupId || (masterRecord.type === 'shared' ? userGroup?.id : undefined)
+            };
             
             // Update in Firestore
-            if (masterRecord.type === 'shared' && userGroup && userGroup.members) {
-              const memberIds = userGroup.members.map(m => m.userId);
-              await expensesAPI.updateSharedExpense(memberIds, baseId, updatedMaster);
-            } else {
-              await expensesAPI.updateExpense(user.uid, baseId, updatedMaster);
-            }
+            await expensesAPI.updateExpense(user.uid, baseId, updatedMaster);
             
             // Update in state: replace the master record with excluded date
             setExpenses(expenses.map(exp => 
@@ -508,14 +524,8 @@ function App() {
         } else {
           // Regular expense deletion (not a recurring instance)
           if (user) {
-            // Check if it's a shared expense
-            if (expenseToDelete && expenseToDelete.type === 'shared' && userGroup && userGroup.members) {
-              const memberIds = userGroup.members.map(m => m.userId);
-              await expensesAPI.deleteSharedExpense(memberIds, id);
-            } else {
-              // Delete from Firestore if user is logged in (personal expense)
-              await expensesAPI.deleteExpense(user.uid, id);
-            }
+            // Delete from Firestore (works for both personal and shared)
+            await expensesAPI.deleteExpense(user.uid, id);
           } else {
             // Delete from localStorage if user is not logged in
             const updated = expenses.filter(expense => expense.id !== id);
@@ -579,8 +589,6 @@ function App() {
       setExpenseFrequency(expense.frequency || 'monthly');
       setExpenseEndDate(expense.endDate || '');
       setExpenseType(expense.type || 'personal');
-      setIsExpenseSplit(expense.isSplit || false);
-      setExpenseSplitMembers(expense.splitMembers || []);
       setEditingExpenseId(id);
       setError('');
       setShowExpenseForm(true);
@@ -611,8 +619,6 @@ function App() {
         setExpenseFrequency(masterRecord.frequency);
         setExpenseEndDate(masterRecord.endDate || '');
         setExpenseType(masterRecord.type || 'personal');
-        setIsExpenseSplit(masterRecord.isSplit || false);
-        setExpenseSplitMembers(masterRecord.splitMembers || []);
         setEditingExpenseId(baseId);
         setRecurringEditScope('all');
       }
@@ -627,8 +633,6 @@ function App() {
       setExpenseFrequency('monthly');
       setExpenseEndDate('');
       setExpenseType(instance.type || 'personal');
-      setIsExpenseSplit(instance.isSplit || false);
-      setExpenseSplitMembers(instance.splitMembers || []);
       setEditingExpenseId(`override-${instanceDate}-${baseId}`); // Special ID for override
       setRecurringEditScope('this');
     } else if (scope === 'future') {
@@ -642,8 +646,6 @@ function App() {
       setExpenseFrequency(masterRecord?.frequency || 'monthly');
       setExpenseEndDate(masterRecord?.endDate || '');
       setExpenseType(instance.type || 'personal');
-      setIsExpenseSplit(instance.isSplit || false);
-      setExpenseSplitMembers(instance.splitMembers || []);
       setEditingExpenseId(`split-${instanceDate}-${baseId}`); // Special ID for split
       setRecurringEditScope('future');
     }
@@ -1616,6 +1618,10 @@ function App() {
           }
           
           // Load expenses and income from Firestore for logged-in user
+          // getExpenses returns ALL expenses from user's collection:
+          // - Personal expenses (type='personal') created by user
+          // - Shared expenses (type='shared') created by user
+          // - Does NOT include shared expenses created by others (in their collections)
           setExpensesLoading(true);
           const firestoreExpenses = await expensesAPI.getExpenses(currentUser.uid);
           const validatedExpenses = validateExpenseData(firestoreExpenses);
@@ -1680,12 +1686,12 @@ function App() {
   }, []);
 
   // Load family income when userGroup changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (userGroup && user) {
       loadFamilyIncome();
       loadFamilySharedExpenses();
     }
+    // eslint-disable-next-line
   }, [userGroup?.id, user?.uid]);
 
   // Sign in with Google
@@ -1755,42 +1761,23 @@ function App() {
   };
 
   // Load family shared expenses when userGroup changes
+  // Uses new data model: fetches shared expenses (stored only in creator's collection)
   const loadFamilySharedExpenses = async () => {
     if (!userGroup || !userGroup.members) {
       setFamilySharedExpenses([]);
+      setFamilyPersonalExpenses([]);
       return;
     }
 
     try {
-      const allSharedExpenses = [];
-      const seenIds = new Set(); // Track unique expenses by ID to avoid duplicates
-      
-      // Fetch expenses from each member
-      for (const member of userGroup.members) {
-        try {
-          const memberExpenses = await expensesAPI.getExpenses(member.userId);
-          
-          // Filter for shared expenses and avoid duplicates
-          memberExpenses.forEach(exp => {
-            if ((exp.type === 'shared' || !exp.type) && !seenIds.has(exp.id)) {
-              seenIds.add(exp.id);
-              // Include userId to track who created this expense
-              allSharedExpenses.push({
-                ...exp,
-                userId: member.userId
-              });
-            }
-          });
-        } catch (error) {
-          console.log(`Could not load expenses for member ${member.name}:`, error.message);
-          // Continue with other members if one fails
-        }
-      }
-      
-      setFamilySharedExpenses(allSharedExpenses);
+      // Use new API to fetch both shared and personal expenses across the group
+      const familyExpenses = await expensesAPI.getAllFamilyExpenses(userGroup.members, userGroup.id);
+      setFamilySharedExpenses(familyExpenses.shared);
+      setFamilyPersonalExpenses(familyExpenses.personal);
     } catch (error) {
-      console.error('Error loading family shared expenses:', error);
+      console.error('Error loading family expenses:', error);
       setFamilySharedExpenses([]);
+      setFamilyPersonalExpenses([]);
     }
   };
 
@@ -1902,6 +1889,7 @@ function App() {
                 userGroup={userGroup}
                 userRole={userRole}
                 expenses={familySharedExpenses}
+                personalExpenses={familyPersonalExpenses}
                 income={familyIncome}
                 user={user}
                 darkMode={darkMode}
@@ -1937,10 +1925,6 @@ function App() {
                 setExpenseEndDate={setExpenseEndDate}
                 expenseType={expenseType}
                 setExpenseType={setExpenseType}
-                isExpenseSplit={isExpenseSplit}
-                setIsExpenseSplit={setIsExpenseSplit}
-                expenseSplitMembers={expenseSplitMembers}
-                setExpenseSplitMembers={setExpenseSplitMembers}
                 darkMode={darkMode}
                 setDarkMode={setDarkMode}
                 onAddExpense={handleAddExpense}

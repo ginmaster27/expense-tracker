@@ -24,10 +24,6 @@ function Dashboard({
   setExpenseEndDate,
   expenseType,
   setExpenseType,
-  isExpenseSplit,
-  setIsExpenseSplit,
-  expenseSplitMembers,
-  setExpenseSplitMembers,
   darkMode,
   setDarkMode,
   onAddExpense,
@@ -1248,47 +1244,6 @@ function Dashboard({
                         <option value="shared">👥 Shared (Family can see)</option>
                       </select>
                       <small className="field-hint">Shared expenses appear in the family dashboard</small>
-                    </div>
-                  )}
-
-                  {userGroup && expenseType === 'shared' && (
-                    <div className="form-group toggle-group">
-                      <label htmlFor="expense-split-toggle">
-                        <input
-                          id="expense-split-toggle"
-                          type="checkbox"
-                          checked={isExpenseSplit}
-                          onChange={(e) => setIsExpenseSplit(e.target.checked)}
-                        />
-                        <span className="toggle-label">Split this expense with others</span>
-                      </label>
-                    </div>
-                  )}
-
-                  {userGroup && expenseType === 'shared' && isExpenseSplit && (
-                    <div className="form-group">
-                      <label htmlFor="split-members">Who to split with?</label>
-                      <div className="split-members-list">
-                        {userGroup.members && userGroup.members
-                          .filter(m => m.userId !== user?.uid)
-                          .map(member => (
-                            <label key={member.userId} className="split-member-checkbox">
-                              <input
-                                type="checkbox"
-                                checked={expenseSplitMembers.includes(member.userId)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setExpenseSplitMembers([...expenseSplitMembers, member.userId]);
-                                  } else {
-                                    setExpenseSplitMembers(expenseSplitMembers.filter(id => id !== member.userId));
-                                  }
-                                }}
-                              />
-                              <span>{member.name}</span>
-                            </label>
-                          ))}
-                      </div>
-                      <small className="field-hint">Selected members will each owe 1/{(expenseSplitMembers.length + 1)} of the amount</small>
                     </div>
                   )}
 
