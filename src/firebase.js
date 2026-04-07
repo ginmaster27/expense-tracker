@@ -96,7 +96,7 @@
 
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc, serverTimestamp, getDoc, setDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc, serverTimestamp, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 
 // Firebase configuration
 // Replace these values with your Firebase project credentials
@@ -244,6 +244,35 @@ export const expensesAPI = {
     } catch (error) {
       console.error('Error getting expenses:', error);
       throw error;
+    }
+  },
+
+  // Listen to expenses in real-time with onSnapshot
+  // Updates state and localStorage whenever expenses change in Firestore
+  // @param userId - Firebase Auth UID
+  // @param onUpdateCallback - Function called with updated expenses array
+  // @returns Function - Unsubscribe function to stop listening
+  listenToExpenses: (userId, onUpdateCallback) => {
+    try {
+      const userExpensesRef = collection(db, 'users', userId, 'expenses');
+      const unsubscribe = onSnapshot(
+        userExpensesRef,
+        (snapshot) => {
+          const expenses = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+          // Call callback with updated expenses
+          onUpdateCallback(expenses);
+        },
+        (error) => {
+          console.error('Error listening to expenses:', error);
+        }
+      );
+      return unsubscribe;
+    } catch (error) {
+      console.error('Error setting up expenses listener:', error);
+      return () => {}; // Return no-op unsubscribe if setup fails
     }
   },
 
@@ -490,6 +519,35 @@ export const incomeAPI = {
     } catch (error) {
       console.error('Error getting income:', error);
       throw error;
+    }
+  },
+
+  // Listen to income in real-time with onSnapshot
+  // Updates state and localStorage whenever income changes in Firestore
+  // @param userId - Firebase Auth UID
+  // @param onUpdateCallback - Function called with updated income array
+  // @returns Function - Unsubscribe function to stop listening
+  listenToIncome: (userId, onUpdateCallback) => {
+    try {
+      const userIncomeRef = collection(db, 'users', userId, 'income');
+      const unsubscribe = onSnapshot(
+        userIncomeRef,
+        (snapshot) => {
+          const income = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+          // Call callback with updated income
+          onUpdateCallback(income);
+        },
+        (error) => {
+          console.error('Error listening to income:', error);
+        }
+      );
+      return unsubscribe;
+    } catch (error) {
+      console.error('Error setting up income listener:', error);
+      return () => {}; // Return no-op unsubscribe if setup fails
     }
   },
 

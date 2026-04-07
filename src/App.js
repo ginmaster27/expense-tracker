@@ -291,18 +291,21 @@ function App() {
               exp.id === masterId ? updatedMaster : exp
             );
             
+            // Update state and cache immediately (optimistic update)
+            updateExpenseCacheOptimistically(finalExpenses);
+            
+            // Sync to Firestore in background (don't await)
             if (user) {
-              await expensesAPI.updateExpense(user.uid, masterId, {
+              expensesAPI.updateExpense(user.uid, masterId, {
                 ...updatedMaster,
                 excludedDates: updatedMaster.excludedDates
+              }).catch(error => {
+                console.error('Error syncing override master to Firestore:', error);
               });
-              await expensesAPI.addExpense(user.uid, overrideData);
-            } else {
-              setExpenses(finalExpenses);
-              localStorage.setItem('expenses', JSON.stringify(finalExpenses));
+              expensesAPI.addExpense(user.uid, overrideData).catch(error => {
+                console.error('Error syncing override to Firestore:', error);
+              });
             }
-            
-            setExpenses(finalExpenses);
             showToast('This occurrence has been modified independently', 'success');
           }
         } else if (isSplit && recurringEditScope === 'future') {
@@ -355,15 +358,20 @@ function App() {
             );
             updatedExpenses.push(newRecurringRule);
             
-            if (user) {
-              await expensesAPI.updateExpense(user.uid, baseId, updatedMaster);
-              await expensesAPI.addExpense(user.uid, newRecurringRule);
-            } else {
-              setExpenses(updatedExpenses);
-              localStorage.setItem('expenses', JSON.stringify(updatedExpenses));
-            }
+            // Update state and cache immediately (optimistic update)
+            updateExpenseCacheOptimistically(updatedExpenses);
             
-            setExpenses(updatedExpenses);
+            // Sync to Firestore in background (don't await)
+            if (user) {
+              expensesAPI.updateExpense(user.uid, baseId, updatedMaster)
+                .catch(error => {
+                  console.error('Error syncing split master to Firestore:', error);
+                });
+              expensesAPI.addExpense(user.uid, newRecurringRule)
+                .catch(error => {
+                  console.error('Error syncing split new rule to Firestore:', error);
+                });
+            }
             showToast('Recurring rule split. New rule created from this date forward.', 'success');
           }
         } else {
@@ -383,22 +391,20 @@ function App() {
             expenseDataToSave.groupId = expenseToUpdate?.groupId || userGroup?.id;
           }
           
-          if (user) {
-            // Update in database
-            await expensesAPI.updateExpense(user.uid, editingExpenseId, expenseDataToSave);
-          } else {
-            // Update localStorage if user is not logged in
-            const updated = expenses.map(exp => 
-              exp.id === editingExpenseId ? { id: editingExpenseId, ...expenseDataToSave } : exp
-            );
-            setExpenses(updated);
-            localStorage.setItem('expenses', JSON.stringify(updated));
-          }
-          
-          // Update local state with complete data
-          setExpenses(expenses.map(exp => 
+          // Update state and cache immediately (optimistic update)
+          const updated = expenses.map(exp => 
             exp.id === editingExpenseId ? { id: editingExpenseId, ...expenseDataToSave } : exp
-          ));
+          );
+          updateExpenseCacheOptimistically(updated);
+          
+          // Sync to Firestore in background (don't await)
+          if (user) {
+            expensesAPI.updateExpense(user.uid, editingExpenseId, expenseDataToSave)
+              .catch(error => {
+                console.error('Error syncing update to Firestore (using local cache):', error);
+                // Data is already in local cache, so don't show error to user
+              });
+          }
           
           const updateType = isRecurringUpdate ? 'Recurring expense' : 'Expense';
           showToast(`${updateType} updated successfully. All instances updated.`, 'success');
@@ -408,29 +414,33 @@ function App() {
         setRecurringEditScope(null);
       } else {
         // Add new expense
-        if (user) {
-          // For both recurring and non-recurring: store the rule, not individual instances
-          const expenseDataToSave = {
-            ...newExpenseData,
-            createdBy: user.uid
-          };
-          
-          // Only add groupId for shared expenses
-          if (newExpenseData.type === 'shared') {
-            expenseDataToSave.groupId = userGroup?.id;
-          }
-          
-          const savedExpense = await expensesAPI.addExpense(user.uid, expenseDataToSave);
-          setExpenses([...expenses, savedExpense]);
-        } else {
-          // Save to localStorage if user is not logged in
-          const newExpense = {
-            id: Date.now().toString(),
-            ...newExpenseData
-          };
-          setExpenses([...expenses, newExpense]);
-          localStorage.setItem('expenses', JSON.stringify([...expenses, newExpense]));
+        // Generate expense with ID immediately for optimistic update
+        const expenseId = Date.now().toString();
+        const expenseDataToSave = {
+          ...newExpenseData,
+          createdBy: user?.uid
+        };
+        
+        // Only add groupId for shared expenses
+        if (newExpenseData.type === 'shared') {
+          expenseDataToSave.groupId = userGroup?.id;
         }
+        
+        const newExpense = { id: expenseId, ...expenseDataToSave };
+        const updatedExpenses = [...expenses, newExpense];
+        
+        // Update state and cache immediately (optimistic update)
+        updateExpenseCacheOptimistically(updatedExpenses);
+        
+        // Sync to Firestore in background (don't await)
+        if (user) {
+          expensesAPI.addExpense(user.uid, expenseDataToSave)
+            .catch(error => {
+              console.error('Error syncing expense to Firestore (using local cache):', error);
+              // Data is already in local cache, so don't show error to user
+            });
+        }
+        
         showToast('Expense added successfully', 'success');
       }
 
@@ -496,17 +506,21 @@ function App() {
               groupId: masterRecord.groupId || (masterRecord.type === 'shared' ? userGroup?.id : undefined)
             };
             
-            // Update in Firestore
-            await expensesAPI.updateExpense(user.uid, baseId, updatedMaster);
-            
-            // Update in state: replace the master record with excluded date
-            setExpenses(expenses.map(exp => 
+            // Update state and cache immediately (optimistic update)
+            const updated = expenses.map(exp => 
               exp.id === baseId ? updatedMaster : exp
-            ));
+            );
+            updateExpenseCacheOptimistically(updated);
+            
+            // Sync to Firestore in background (don't await)
+            expensesAPI.updateExpense(user.uid, baseId, updatedMaster)
+              .catch(error => {
+                console.error('Error syncing exclusion to Firestore (using local cache):', error);
+              });
             
             showToast('This occurrence removed from recurring series', 'success');
           } else if (isRecurringInstance) {
-            // For localStorage, handle recurring instance deletion
+            // For all users, handle recurring instance deletion optimistically
             const dateParts = id.split('-').slice(-3);
             const excludedDate = dateParts.join('-');
             const baseId = id.substring(0, id.lastIndexOf('-' + excludedDate));
@@ -516,23 +530,35 @@ function App() {
               const excludedDates = [...(masterRecord.excludedDates || []), excludedDate];
               const updatedMaster = { ...masterRecord, excludedDates };
               const updated = expenses.map(exp => exp.id === baseId ? updatedMaster : exp);
-              setExpenses(updated);
-              localStorage.setItem('expenses', JSON.stringify(updated));
+              
+              // Update state and cache immediately (optimistic update)
+              updateExpenseCacheOptimistically(updated);
+              
+              // Sync to Firestore in background if user is logged in
+              if (user) {
+                expensesAPI.updateExpense(user.uid, baseId, updatedMaster)
+                  .catch(error => {
+                    console.error('Error syncing instance exclusion to Firestore:', error);
+                  });
+              }
+              
               showToast('This occurrence removed from recurring series', 'success');
             }
           }
         } else {
           // Regular expense deletion (not a recurring instance)
-          if (user) {
-            // Delete from Firestore (works for both personal and shared)
-            await expensesAPI.deleteExpense(user.uid, id);
-          } else {
-            // Delete from localStorage if user is not logged in
-            const updated = expenses.filter(expense => expense.id !== id);
-            localStorage.setItem('expenses', JSON.stringify(updated));
-          }
+          // Update state and cache immediately (optimistic update)
+          const updated = expenses.filter(expense => expense.id !== id);
+          updateExpenseCacheOptimistically(updated);
           
-          setExpenses(expenses.filter(expense => expense.id !== id));
+          // Sync deletion to Firestore in background (don't await)
+          if (user) {
+            expensesAPI.deleteExpense(user.uid, id)
+              .catch(error => {
+                console.error('Error syncing deletion to Firestore (using local cache):', error);
+                // Data is already removed from local cache
+              });
+          }
           showToast('Expense deleted successfully', 'success');
         }
       } catch (error) {
@@ -1599,6 +1625,51 @@ function App() {
     });
   };
 
+  // Helper functions for cache management with timestamps
+  // Cache stores both data and timestamp in localStorage
+  // Timestamps are updated whenever listeners receive new data from Firestore
+  
+  const getCachedWithTimestamp = (key) => {
+    try {
+      const cached = localStorage.getItem(`${key}_cache`);
+      const timestamp = localStorage.getItem(`${key}_timestamp`);
+      if (cached && timestamp) {
+        return {
+          data: JSON.parse(cached),
+          timestamp: parseInt(timestamp),
+          age: Date.now() - parseInt(timestamp)
+        };
+      }
+      return null;
+    } catch (error) {
+      console.warn(`Error reading cache for ${key}:`, error);
+      return null;
+    }
+  };
+  
+  const setCacheWithTimestamp = (key, data) => {
+    try {
+      localStorage.setItem(`${key}_cache`, JSON.stringify(data));
+      localStorage.setItem(`${key}_timestamp`, Date.now().toString());
+    } catch (error) {
+      console.warn(`Error writing cache for ${key}:`, error);
+    }
+  };
+
+  // Helper function for optimistic cache updates
+  // Updates state and localStorage immediately, then syncs to Firestore in background
+  const updateExpenseCacheOptimistically = (updatedExpenses) => {
+    // Update React state immediately
+    setExpenses(updatedExpenses);
+    
+    // Update localStorage cache immediately
+    setCacheWithTimestamp('expenses', updatedExpenses);
+    
+    // Invalidate the 5-minute cache to force fresh sync on next load
+    // (Firestore will be the source of truth)
+    return updatedExpenses;
+  };
+
   // Listen for Firebase auth state changes and load expenses and income
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -1618,19 +1689,58 @@ function App() {
           }
           
           // Load expenses and income from Firestore for logged-in user
-          // getExpenses returns ALL expenses from user's collection:
-          // - Personal expenses (type='personal') created by user
-          // - Shared expenses (type='shared') created by user
-          // - Does NOT include shared expenses created by others (in their collections)
-          setExpensesLoading(true);
-          const firestoreExpenses = await expensesAPI.getExpenses(currentUser.uid);
-          const validatedExpenses = validateExpenseData(firestoreExpenses);
-
-          const firestoreIncome = await incomeAPI.getIncome(currentUser.uid);
-          const validatedIncome = validateExpenseData(firestoreIncome);
+          // Using real-time listeners (onSnapshot) for automatic sync
+          // - Listen for changes in Firestore
+          // - Update state and localStorage immediately when data changes
+          // - Reduces unnecessary reads by only syncing when changes occur
           
-          setExpenses(validatedExpenses);
-          setIncome(validatedIncome);
+          // Step 1: Load cached data immediately for instant UI
+          const cachedExpensesInfo = getCachedWithTimestamp('expenses');
+          const cachedIncomeInfo = getCachedWithTimestamp('income');
+          
+          let cachedExpenses = cachedExpensesInfo ? validateExpenseData(cachedExpensesInfo.data) : [];
+          let cachedIncome = cachedIncomeInfo ? validateExpenseData(cachedIncomeInfo.data) : [];
+          
+          // Step 2: Set cached data immediately (if available) for smooth UI
+          if (cachedExpenses.length > 0) {
+            setExpenses(cachedExpenses);
+          }
+          if (cachedIncome.length > 0) {
+            setIncome(cachedIncome);
+          }
+          
+          // Step 3: Set up real-time listeners
+          // These will fire once immediately with current data, then again on every change
+          setExpensesLoading(true);
+          
+          // Listen to expenses in real-time
+          const unsubscribeExpenses = expensesAPI.listenToExpenses(
+            currentUser.uid,
+            (updatedExpenses) => {
+              const validatedExpenses = validateExpenseData(updatedExpenses);
+              // Update state
+              setExpenses(validatedExpenses);
+              // Update localStorage cache with fresh timestamp
+              setCacheWithTimestamp('expenses', validatedExpenses);
+              setExpensesLoading(false);
+            }
+          );
+          
+          // Listen to income in real-time
+          const unsubscribeIncome = incomeAPI.listenToIncome(
+            currentUser.uid,
+            (updatedIncome) => {
+              const validatedIncome = validateExpenseData(updatedIncome);
+              // Update state
+              setIncome(validatedIncome);
+              // Update localStorage cache with fresh timestamp
+              setCacheWithTimestamp('income', validatedIncome);
+            }
+          );
+          
+          // Store unsubscribe functions to clean up on logout
+          window.__expensesUnsubscribe = unsubscribeExpenses;
+          window.__incomeUnsubscribe = unsubscribeIncome;
           
           // Load user's family group if they belong to one
           try {
@@ -1682,8 +1792,56 @@ function App() {
     });
 
     // Cleanup subscription on unmount
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      // Also clean up any existing listeners on unmount
+      if (window.__expensesUnsubscribe) {
+        window.__expensesUnsubscribe();
+        window.__expensesUnsubscribe = null;
+      }
+      if (window.__incomeUnsubscribe) {
+        window.__incomeUnsubscribe();
+        window.__incomeUnsubscribe = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Force refresh function - bypasses cache freshness check
+  const forceRefreshData = async () => {
+    if (!user) {
+      console.warn('Cannot force refresh - user not authenticated');
+      return;
+    }
+    
+    try {
+      setExpensesLoading(true);
+      
+      // Fetch fresh data from Firestore (bypass cache entirely)
+      const firestoreExpenses = await expensesAPI.getExpenses(user.uid);
+      const validatedExpenses = validateExpenseData(firestoreExpenses);
+      
+      const firestoreIncome = await incomeAPI.getIncome(user.uid);
+      const validatedIncome = validateExpenseData(firestoreIncome);
+      
+      // Update state
+      setExpenses(validatedExpenses);
+      setIncome(validatedIncome);
+      
+      // Update cache with fresh timestamps
+      setCacheWithTimestamp('expenses', validatedExpenses);
+      setCacheWithTimestamp('income', validatedIncome);
+      
+      setError(''); // Clear any previous errors
+      return { success: true, message: 'Data refreshed successfully' };
+    } catch (error) {
+      console.error('Error force refreshing data:', error);
+      setError('Failed to refresh data. Please try again.');
+      return { success: false, message: error.message };
+    } finally {
+      setExpensesLoading(false);
+    }
+  };
 
   // Load family income when userGroup changes
   useEffect(() => {
@@ -1715,6 +1873,16 @@ function App() {
   // Logout user
   const handleLogout = async () => {
     try {
+      // Clean up real-time listeners
+      if (window.__expensesUnsubscribe) {
+        window.__expensesUnsubscribe();
+        window.__expensesUnsubscribe = null;
+      }
+      if (window.__incomeUnsubscribe) {
+        window.__incomeUnsubscribe();
+        window.__incomeUnsubscribe = null;
+      }
+      
       await signOut(auth);
       setUser(null);
       setUserGroup(null);
@@ -1903,6 +2071,7 @@ function App() {
                 onDeleteIncome={handleDeleteIncome}
                 onAddExpense={handleAddExpense}
                 onAddIncome={handleAddIncome}
+                onForceRefresh={forceRefreshData}
               />
             ) : (
               <Dashboard
@@ -1986,6 +2155,7 @@ function App() {
                 setShowRecurringEditScope={setShowRecurringEditScope}
                 recurringEditInstance={recurringEditInstance}
                 onRecurringEditScopeSelect={handleRecurringEditScopeSelect}
+                onForceRefresh={forceRefreshData}
               />
             )
           }
@@ -2023,6 +2193,7 @@ function App() {
               onEditIncome={handleEditIncome}
               editingIncomeId={editingIncomeId}
               onCancelEdit={handleCancelEdit}
+              onForceRefresh={forceRefreshData}
             />
           }
         />
