@@ -1252,4 +1252,408 @@ export const dataCleanupAPI = {
   }
 };
 
+// ══════════════════════════════════════════════════════════════════════════════
+// INVESTMENTS & POLICIES API
+// ══════════════════════════════════════════════════════════════════════════════
+// Manages SIPs, insurance policies, vehicle insurance, and pollution certificates
+// All stored under /users/{userId} subcollections for private user data
+
+export const sipsAPI = {
+  // Add a new SIP (Systematic Investment Plan)
+  // @param userId - Firebase Auth UID
+  // @param sipData - { sipType, sipName, amount, startDate, endDate, frequency, whoPaid, notes }
+  // @returns Promise<Object> - Created SIP with ID
+  addSIP: async (userId, sipData) => {
+    try {
+      const userSIPsRef = collection(db, 'users', userId, 'sips');
+      const docRef = await addDoc(userSIPsRef, {
+        ...sipData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return { id: docRef.id, ...sipData };
+    } catch (error) {
+      console.error('Error adding SIP:', error);
+      throw error;
+    }
+  },
+
+  // Get all SIPs for a user
+  getSIPs: async (userId) => {
+    try {
+      const userSIPsRef = collection(db, 'users', userId, 'sips');
+      const snapshot = await getDocs(userSIPsRef);
+      return snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+    } catch (error) {
+      console.error('Error getting SIPs:', error);
+      throw error;
+    }
+  },
+
+  // Listen to SIPs in real-time
+  listenToSIPs: (userId, onUpdateCallback) => {
+    try {
+      const userSIPsRef = collection(db, 'users', userId, 'sips');
+      const unsubscribe = onSnapshot(userSIPsRef, (snapshot) => {
+        const sips = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        onUpdateCallback(sips);
+      }, (error) => {
+        console.error('Error listening to SIPs:', error);
+      });
+      return unsubscribe;
+    } catch (error) {
+      console.error('Error setting up SIPs listener:', error);
+      return () => {};
+    }
+  },
+
+  // Delete a SIP
+  deleteSIP: async (userId, sipId) => {
+    try {
+      const sipRef = doc(db, 'users', userId, 'sips', sipId);
+      await deleteDoc(sipRef);
+    } catch (error) {
+      console.error('Error deleting SIP:', error);
+      throw error;
+    }
+  },
+
+  // Update a SIP
+  updateSIP: async (userId, sipId, sipData) => {
+    try {
+      const sipRef = doc(db, 'users', userId, 'sips', sipId);
+      await updateDoc(sipRef, {
+        ...sipData,
+        updatedAt: serverTimestamp(),
+      });
+      return { id: sipId, ...sipData };
+    } catch (error) {
+      console.error('Error updating SIP:', error);
+      throw error;
+    }
+  },
+};
+
+export const sipTopUpsAPI = {
+  // Add a top-up/lumpsum deposit to a SIP
+  addTopUp: async (userId, topUpData) => {
+    try {
+      const userTopUpsRef = collection(db, 'users', userId, 'sipTopUps');
+      const docRef = await addDoc(userTopUpsRef, {
+        ...topUpData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return { id: docRef.id, ...topUpData };
+    } catch (error) {
+      console.error('Error adding top-up:', error);
+      throw error;
+    }
+  },
+
+  // Get all top-ups for a user
+  getTopUps: async (userId) => {
+    try {
+      const userTopUpsRef = collection(db, 'users', userId, 'sipTopUps');
+      const snapshot = await getDocs(userTopUpsRef);
+      return snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+    } catch (error) {
+      console.error('Error getting top-ups:', error);
+      throw error;
+    }
+  },
+
+  // Listen to top-ups in real-time
+  listenToTopUps: (userId, onUpdateCallback) => {
+    try {
+      const userTopUpsRef = collection(db, 'users', userId, 'sipTopUps');
+      const unsubscribe = onSnapshot(userTopUpsRef, (snapshot) => {
+        const topUps = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        onUpdateCallback(topUps);
+      }, (error) => {
+        console.error('Error listening to top-ups:', error);
+      });
+      return unsubscribe;
+    } catch (error) {
+      console.error('Error setting up top-ups listener:', error);
+      return () => {};
+    }
+  },
+
+  // Delete a top-up
+  deleteTopUp: async (userId, topUpId) => {
+    try {
+      const topUpRef = doc(db, 'users', userId, 'sipTopUps', topUpId);
+      await deleteDoc(topUpRef);
+    } catch (error) {
+      console.error('Error deleting top-up:', error);
+      throw error;
+    }
+  },
+
+  // Update a top-up
+  updateTopUp: async (userId, topUpId, topUpData) => {
+    try {
+      const topUpRef = doc(db, 'users', userId, 'sipTopUps', topUpId);
+      await updateDoc(topUpRef, {
+        ...topUpData,
+        updatedAt: serverTimestamp(),
+      });
+      return { id: topUpId, ...topUpData };
+    } catch (error) {
+      console.error('Error updating top-up:', error);
+      throw error;
+    }
+  },
+};
+
+export const insurancePoliciesAPI = {
+  // Add a life/medical insurance policy
+  addPolicy: async (userId, policyData) => {
+    try {
+      const userPoliciesRef = collection(db, 'users', userId, 'insurancePolicies');
+      const docRef = await addDoc(userPoliciesRef, {
+        ...policyData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return { id: docRef.id, ...policyData };
+    } catch (error) {
+      console.error('Error adding insurance policy:', error);
+      throw error;
+    }
+  },
+
+  // Get all insurance policies for a user
+  getPolicies: async (userId) => {
+    try {
+      const userPoliciesRef = collection(db, 'users', userId, 'insurancePolicies');
+      const snapshot = await getDocs(userPoliciesRef);
+      return snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+    } catch (error) {
+      console.error('Error getting insurance policies:', error);
+      throw error;
+    }
+  },
+
+  // Listen to insurance policies in real-time
+  listenToPolicies: (userId, onUpdateCallback) => {
+    try {
+      const userPoliciesRef = collection(db, 'users', userId, 'insurancePolicies');
+      const unsubscribe = onSnapshot(userPoliciesRef, (snapshot) => {
+        const policies = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        onUpdateCallback(policies);
+      }, (error) => {
+        console.error('Error listening to insurance policies:', error);
+      });
+      return unsubscribe;
+    } catch (error) {
+      console.error('Error setting up insurance policies listener:', error);
+      return () => {};
+    }
+  },
+
+  // Delete an insurance policy
+  deletePolicy: async (userId, policyId) => {
+    try {
+      const policyRef = doc(db, 'users', userId, 'insurancePolicies', policyId);
+      await deleteDoc(policyRef);
+    } catch (error) {
+      console.error('Error deleting insurance policy:', error);
+      throw error;
+    }
+  },
+
+  // Update an insurance policy
+  updatePolicy: async (userId, policyId, policyData) => {
+    try {
+      const policyRef = doc(db, 'users', userId, 'insurancePolicies', policyId);
+      await updateDoc(policyRef, {
+        ...policyData,
+        updatedAt: serverTimestamp(),
+      });
+      return { id: policyId, ...policyData };
+    } catch (error) {
+      console.error('Error updating insurance policy:', error);
+      throw error;
+    }
+  },
+};
+
+export const vehicleInsurancePoliciesAPI = {
+  // Add a vehicle insurance policy
+  addVehiclePolicy: async (userId, vehiclePolicyData) => {
+    try {
+      const userVehiclePoliciesRef = collection(db, 'users', userId, 'vehicleInsurancePolicies');
+      const docRef = await addDoc(userVehiclePoliciesRef, {
+        ...vehiclePolicyData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return { id: docRef.id, ...vehiclePolicyData };
+    } catch (error) {
+      console.error('Error adding vehicle insurance policy:', error);
+      throw error;
+    }
+  },
+
+  // Get all vehicle insurance policies for a user
+  getVehiclePolicies: async (userId) => {
+    try {
+      const userVehiclePoliciesRef = collection(db, 'users', userId, 'vehicleInsurancePolicies');
+      const snapshot = await getDocs(userVehiclePoliciesRef);
+      return snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+    } catch (error) {
+      console.error('Error getting vehicle insurance policies:', error);
+      throw error;
+    }
+  },
+
+  // Listen to vehicle insurance policies in real-time
+  listenToVehiclePolicies: (userId, onUpdateCallback) => {
+    try {
+      const userVehiclePoliciesRef = collection(db, 'users', userId, 'vehicleInsurancePolicies');
+      const unsubscribe = onSnapshot(userVehiclePoliciesRef, (snapshot) => {
+        const policies = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        onUpdateCallback(policies);
+      }, (error) => {
+        console.error('Error listening to vehicle insurance policies:', error);
+      });
+      return unsubscribe;
+    } catch (error) {
+      console.error('Error setting up vehicle insurance policies listener:', error);
+      return () => {};
+    }
+  },
+
+  // Delete a vehicle insurance policy
+  deleteVehiclePolicy: async (userId, vehiclePolicyId) => {
+    try {
+      const vehiclePolicyRef = doc(db, 'users', userId, 'vehicleInsurancePolicies', vehiclePolicyId);
+      await deleteDoc(vehiclePolicyRef);
+    } catch (error) {
+      console.error('Error deleting vehicle insurance policy:', error);
+      throw error;
+    }
+  },
+
+  // Update a vehicle insurance policy
+  updateVehiclePolicy: async (userId, vehiclePolicyId, vehiclePolicyData) => {
+    try {
+      const vehiclePolicyRef = doc(db, 'users', userId, 'vehicleInsurancePolicies', vehiclePolicyId);
+      await updateDoc(vehiclePolicyRef, {
+        ...vehiclePolicyData,
+        updatedAt: serverTimestamp(),
+      });
+      return { id: vehiclePolicyId, ...vehiclePolicyData };
+    } catch (error) {
+      console.error('Error updating vehicle insurance policy:', error);
+      throw error;
+    }
+  },
+};
+
+export const vehiclePollutionRecordsAPI = {
+  // Add a vehicle pollution certificate record
+  addRecord: async (userId, recordData) => {
+    try {
+      const userRecordsRef = collection(db, 'users', userId, 'vehiclePollutionRecords');
+      const docRef = await addDoc(userRecordsRef, {
+        ...recordData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return { id: docRef.id, ...recordData };
+    } catch (error) {
+      console.error('Error adding pollution record:', error);
+      throw error;
+    }
+  },
+
+  // Get all pollution records for a user
+  getRecords: async (userId) => {
+    try {
+      const userRecordsRef = collection(db, 'users', userId, 'vehiclePollutionRecords');
+      const snapshot = await getDocs(userRecordsRef);
+      return snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+    } catch (error) {
+      console.error('Error getting pollution records:', error);
+      throw error;
+    }
+  },
+
+  // Listen to pollution records in real-time
+  listenToRecords: (userId, onUpdateCallback) => {
+    try {
+      const userRecordsRef = collection(db, 'users', userId, 'vehiclePollutionRecords');
+      const unsubscribe = onSnapshot(userRecordsRef, (snapshot) => {
+        const records = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        onUpdateCallback(records);
+      }, (error) => {
+        console.error('Error listening to pollution records:', error);
+      });
+      return unsubscribe;
+    } catch (error) {
+      console.error('Error setting up pollution records listener:', error);
+      return () => {};
+    }
+  },
+
+  // Delete a pollution record
+  deleteRecord: async (userId, recordId) => {
+    try {
+      const recordRef = doc(db, 'users', userId, 'vehiclePollutionRecords', recordId);
+      await deleteDoc(recordRef);
+    } catch (error) {
+      console.error('Error deleting pollution record:', error);
+      throw error;
+    }
+  },
+
+  // Update a pollution record
+  updateRecord: async (userId, recordId, recordData) => {
+    try {
+      const recordRef = doc(db, 'users', userId, 'vehiclePollutionRecords', recordId);
+      await updateDoc(recordRef, {
+        ...recordData,
+        updatedAt: serverTimestamp(),
+      });
+      return { id: recordId, ...recordData };
+    } catch (error) {
+      console.error('Error updating pollution record:', error);
+      throw error;
+    }
+  },
+};
+
 export default app;

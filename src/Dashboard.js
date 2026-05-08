@@ -1,8 +1,9 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useState, useRef } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, LineChart, Line } from 'recharts';
 import logo from './assets/logo.png';
 import FamilyGroupManager from './FamilyGroupManager';
+import HamburgerMenu from './HamburgerMenu';
 
 function Dashboard({
   expenses,
@@ -382,11 +383,12 @@ function Dashboard({
             </div>
 
             <div className="header-right">
-              {totalAmount > 0 && (
-                <Link to="/expenses" className="nav-link">
-                  View Expenses
-                </Link>
-              )}
+              <HamburgerMenu 
+                user={user} 
+                onLogout={onLogout} 
+                userGroup={userGroup} 
+                darkMode={darkMode} 
+              />
             </div>
           </div>
         </div>
@@ -1196,6 +1198,36 @@ function Dashboard({
                       >
                         💳 EMI
                       </button>
+                      <button
+                        type="button"
+                        className={`quick-btn ${category === 'Education' ? 'active' : ''}`}
+                        onClick={() => {
+                          setCategory('Education');
+                          if (error) setError('');
+                        }}
+                      >
+                        📚 Education
+                      </button>
+                      <button
+                        type="button"
+                        className={`quick-btn ${category === 'Investments' ? 'active' : ''}`}
+                        onClick={() => {
+                          setCategory('Investments');
+                          if (error) setError('');
+                        }}
+                      >
+                        📈 Investments
+                      </button>
+                      <button
+                        type="button"
+                        className={`quick-btn ${category === 'Househelp' ? 'active' : ''}`}
+                        onClick={() => {
+                          setCategory('Househelp');
+                          if (error) setError('');
+                        }}
+                      >
+                        🏠 Househelp
+                      </button>
                     </div>
                     <select
                       id="category"
@@ -1216,6 +1248,9 @@ function Dashboard({
                       <option value="Vehicle">Vehicle</option>
                       <option value="Medical">Medical</option>
                       <option value="EMI">EMI</option>
+                      <option value="Education">Education</option>
+                      <option value="Investments">Investments</option>
+                      <option value="Househelp">Househelp</option>
                       <option value="Others">Others</option>
                     </select>
                   </div>

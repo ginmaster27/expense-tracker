@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logo from './assets/logo.png';
+import HamburgerMenu from './HamburgerMenu';
 
 function ExpensesPage({
   expenses,
@@ -168,13 +169,12 @@ function ExpensesPage({
             </div>
 
             <div className="header-right">
-              <button 
-                className="nav-link back-btn" 
-                onClick={() => navigate(-1)}
-                title="Go back"
-              >
-                ← Back
-              </button>
+              <HamburgerMenu 
+                user={user} 
+                onLogout={onLogout} 
+                userGroup={null}
+                darkMode={darkMode} 
+              />
             </div>
           </div>
         </div>

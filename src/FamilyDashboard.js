@@ -41,6 +41,58 @@ function FamilyDashboard({
   const totalPersonalExpenses = (personalExpenses || []).reduce((sum, exp) => sum + (exp.amount || 0), 0);
   const totalFamilyExpenses = totalSharedExpenses + totalPersonalExpenses;
   const totalFamilyIncome = income.reduce((sum, inc) => sum + (inc.amount || 0), 0);
+  
+  // Calculate monthly family income
+  const getMonthlyIncome = () => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    return income.reduce((sum, inc) => {
+      if (inc.date) {
+        const incomeDate = new Date(inc.date);
+        if (incomeDate.getMonth() === currentMonth && incomeDate.getFullYear() === currentYear) {
+          return sum + (inc.amount || 0);
+        }
+      }
+      return sum;
+    }, 0);
+  };
+  
+  // Calculate monthly family expenses
+  const getMonthlyExpenses = () => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    let monthlyTotal = 0;
+    
+    // Add shared expenses for this month
+    sharedExpenses.forEach(exp => {
+      if (exp.date) {
+        const expDate = new Date(exp.date);
+        if (expDate.getMonth() === currentMonth && expDate.getFullYear() === currentYear) {
+          monthlyTotal += exp.amount || 0;
+        }
+      }
+    });
+    
+    // Add personal expenses for this month
+    (personalExpenses || []).forEach(exp => {
+      if (exp.date) {
+        const expDate = new Date(exp.date);
+        if (expDate.getMonth() === currentMonth && expDate.getFullYear() === currentYear) {
+          monthlyTotal += exp.amount || 0;
+        }
+      }
+    });
+    
+    return monthlyTotal;
+  };
+  
+  const monthlyFamilyIncome = getMonthlyIncome();
+  const monthlyFamilyExpenses = getMonthlyExpenses();
+  const monthlyBalance = monthlyFamilyIncome - monthlyFamilyExpenses;
   const familyBalance = totalFamilyIncome - totalFamilyExpenses;
 
   // Get member list from userGroup
@@ -468,6 +520,15 @@ function FamilyDashboard({
             <h3 className="card-title">Total Family Income</h3>
             <div className="card-amount">{formatCurrency(totalFamilyIncome)}</div>
             <p className="card-detail">{income.length} entries</p>
+          </div>
+        </div>
+
+        <div className="summary-card income-card">
+          <div className="card-icon">📅</div>
+          <div className="card-content">
+            <h3 className="card-title">Monthly Income</h3>
+            <div className="card-amount">{formatCurrency(monthlyFamilyIncome)}</div>
+            <p className="card-detail">This month • Balance: {formatCurrency(monthlyBalance)}</p>
           </div>
         </div>
 

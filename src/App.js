@@ -5,8 +5,10 @@ import { auth, googleProvider, expensesAPI, incomeAPI, familyGroupsAPI, usersAPI
 import Dashboard from './Dashboard';
 import FamilyDashboard from './FamilyDashboard';
 import ExpensesPage from './ExpenseList';
+import InvestmentsModule from './InvestmentsModule';
 import Toast from './Toast';
 import './App.css';
+import './HamburgerMenu.css';
 
 function App() {
   // Initialize expenses as empty - they will be loaded from Firestore (if logged in) or localStorage (if logged out) in the auth effect
@@ -2194,6 +2196,17 @@ function App() {
               editingIncomeId={editingIncomeId}
               onCancelEdit={handleCancelEdit}
               onForceRefresh={forceRefreshData}
+            />
+          }
+        />
+        <Route
+          path="/investments"
+          element={
+            <InvestmentsModule
+              user={user}
+              darkMode={darkMode}
+              showToast={showToast}
+              onLogout={handleLogout}
             />
           }
         />

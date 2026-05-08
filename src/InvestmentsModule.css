@@ -1,0 +1,1563 @@
+/* ══════════════════════════════════════════════════════════════════════════════
+   INVESTMENTS & POLICIES MODULE STYLES
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.investments-module {
+  min-height: 100vh;
+  background-color: #f5f5f5;
+  transition: background-color 0.3s ease;
+}
+
+.investments-module.dark-mode {
+  background-color: #1a1a1a;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   INVESTMENTS HEADER
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+.investments-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  background-color: white;
+  border-bottom: 1px solid #e0e0e0;
+  margin-bottom: 20px;
+}
+
+.investments-module.dark-mode .investments-header {
+  background-color: #2a2a2a;
+  border-bottom-color: #333;
+}
+
+.investments-header-left {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex: 1;
+}
+
+.back-button {
+  padding: 8px 12px;
+  background-color: #f0f0f0;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  transition: all 0.2s ease;
+}
+
+.investments-module.dark-mode .back-button {
+  background-color: #333;
+  border-color: #444;
+  color: #f0f0f0;
+}
+
+.back-button:hover {
+  background-color: #e0e0e0;
+}
+
+.investments-module.dark-mode .back-button:hover {
+  background-color: #444;
+}
+
+.investments-header-title {
+  font-size: 22px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.investments-module.dark-mode .investments-header-title {
+  color: #f0f0f0;
+}
+
+.investments-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.investments-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px 20px 20px;
+}
+
+.investments-title {
+  font-size: 28px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  color: #333;
+  text-align: center;
+  display: none; /* Hide since we moved it to header */
+}
+
+.investments-module.dark-mode .investments-title {
+  color: #f0f0f0;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   TABS NAVIGATION
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+.investments-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.investments-module.dark-mode .investments-tabs {
+  border-bottom-color: #333;
+}
+
+.tab-button {
+  padding: 12px 20px;
+  border: none;
+  background-color: transparent;
+  color: #666;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.tab-button:hover {
+  color: #2196F3;
+  background-color: rgba(33, 150, 243, 0.05);
+}
+
+.tab-button.active {
+  color: #2196F3;
+  border-bottom-color: #2196F3;
+}
+
+.investments-module.dark-mode .tab-button {
+  color: #aaa;
+}
+
+.investments-module.dark-mode .tab-button:hover {
+  color: #2196F3;
+  background-color: rgba(33, 150, 243, 0.1);
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   TAB CONTENT
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+.tab-content {
+  background-color: white;
+  border-radius: 12px;
+  padding: 25px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.investments-module.dark-mode .tab-content {
+  background-color: #2a2a2a;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.tab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.tab-header h3 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+  color: #333;
+}
+
+.investments-module.dark-mode .tab-header h3 {
+  color: #f0f0f0;
+}
+
+.tab-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   ACTION BUTTONS
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+.action-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.primary-btn {
+  background-color: #2196F3;
+  color: white;
+}
+
+.primary-btn:hover {
+  background-color: #1976D2;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+}
+
+.primary-btn:active {
+  transform: translateY(0);
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   FORMS
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+.form-container {
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 1px solid #e0e0e0;
+}
+
+.investments-module.dark-mode .form-container {
+  background-color: #1f1f1f;
+  border-color: #333;
+}
+
+.form-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 15px;
+  color: #333;
+}
+
+.investments-module.dark-mode .form-title {
+  color: #f0f0f0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 15px;
+}
+
+@media (max-width: 600px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+}
+
+.investments-module.dark-mode .form-group label {
+  color: #aaa;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  transition: all 0.3s ease;
+  background-color: white;
+  color: #333;
+}
+
+.investments-module.dark-mode .form-group input,
+.investments-module.dark-mode .form-group select,
+.investments-module.dark-mode .form-group textarea {
+  background-color: #333;
+  color: #f0f0f0;
+  border-color: #444;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #2196F3;
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+.form-group textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.error-message {
+  font-size: 12px;
+  color: #d32f2f;
+  margin-top: 4px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.submit-btn,
+.cancel-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.submit-btn {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.submit-btn:hover:not(:disabled) {
+  background-color: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+.submit-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.cancel-btn {
+  background-color: #f44336;
+  color: white;
+}
+
+.cancel-btn:hover:not(:disabled) {
+  background-color: #da190b;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
+}
+
+.cancel-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   CARDS & LISTS
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+.sip-list,
+.insurance-list,
+.vehicle-insurance-list,
+.pollution-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Section Headers */
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 15px 0;
+}
+
+.investments-module.dark-mode .section-title {
+  color: #f0f0f0;
+}
+
+/* Cards Container */
+.sip-card,
+.insurance-card,
+.vehicle-insurance-card,
+.pollution-card {
+  background-color: white;
+  border-radius: 8px;
+  padding: 18px;
+  border: 1px solid #e0e0e0;
+  transition: all 0.3s ease;
+}
+
+.investments-module.dark-mode .sip-card,
+.investments-module.dark-mode .insurance-card,
+.investments-module.dark-mode .vehicle-insurance-card,
+.investments-module.dark-mode .pollution-card {
+  background-color: #1f1f1f;
+  border-color: #333;
+}
+
+.sip-card:hover,
+.insurance-card:hover,
+.vehicle-insurance-card:hover,
+.pollution-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  border-color: #2196F3;
+}
+
+.investments-module.dark-mode .sip-card:hover,
+.investments-module.dark-mode .insurance-card:hover,
+.investments-module.dark-mode .vehicle-insurance-card:hover,
+.investments-module.dark-mode .pollution-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  border-color: #2196F3;
+}
+
+.sip-card.expired,
+.insurance-card.expired,
+.vehicle-insurance-card.expired,
+.pollution-card.expired {
+  opacity: 0.7;
+  background-color: #fafafa;
+}
+
+.investments-module.dark-mode .sip-card.expired,
+.investments-module.dark-mode .insurance-card.expired,
+.investments-module.dark-mode .vehicle-insurance-card.expired,
+.investments-module.dark-mode .pollution-card.expired {
+  background-color: #252525;
+}
+
+/* Card Header */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.card-title-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  color: #333;
+}
+
+.investments-module.dark-mode .card-title {
+  color: #f0f0f0;
+}
+
+.sip-type-badge,
+.policy-type-badge,
+.renewal-alert-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sip-type-badge {
+  background-color: #e3f2fd;
+  color: #1976D2;
+}
+
+.policy-type-badge {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.renewal-alert-badge {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.card-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.icon-btn {
+  padding: 6px 10px;
+  border: none;
+  background-color: transparent;
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  opacity: 0.7;
+}
+
+.icon-btn:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.investments-module.dark-mode .icon-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.edit-btn:hover {
+  color: #2196F3;
+}
+
+.delete-btn:hover {
+  color: #f44336;
+}
+
+/* Card Summary */
+.card-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 13px;
+}
+
+.investments-module.dark-mode .summary-item {
+  border-bottom-color: #333;
+}
+
+.summary-label {
+  font-weight: 600;
+  color: #666;
+}
+
+.investments-module.dark-mode .summary-label {
+  color: #aaa;
+}
+
+.summary-value {
+  color: #333;
+}
+
+.investments-module.dark-mode .summary-value {
+  color: #f0f0f0;
+}
+
+.summary-value.highlight {
+  font-weight: 600;
+  color: #2196F3;
+}
+
+/* Card Notes */
+.card-notes {
+  background-color: #f0f8ff;
+  border-left: 3px solid #2196F3;
+  padding: 10px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #333;
+  margin-top: 8px;
+  word-break: break-word;
+}
+
+.investments-module.dark-mode .card-notes {
+  background-color: #1e3a5f;
+  color: #f0f0f0;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   SIP-SPECIFIC STYLES
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+.topups-section {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.investments-module.dark-mode .topups-section {
+  border-top-color: #333;
+}
+
+.topups-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.topups-header h5 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+  color: #666;
+}
+
+.investments-module.dark-mode .topups-header h5 {
+  color: #aaa;
+}
+
+.add-topup-btn {
+  padding: 6px 12px;
+  border: 1px solid #2196F3;
+  background-color: transparent;
+  color: #2196F3;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.add-topup-btn:hover {
+  background-color: #2196F3;
+  color: white;
+}
+
+.topups-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.topup-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.investments-module.dark-mode .topup-item {
+  background-color: #333;
+}
+
+.topup-info {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.topup-amount {
+  font-weight: 600;
+  color: #2196F3;
+}
+
+.topup-date,
+.topup-paid-by {
+  color: #666;
+}
+
+.investments-module.dark-mode .topup-date,
+.investments-module.dark-mode .topup-paid-by {
+  color: #aaa;
+}
+
+.no-topups {
+  font-size: 12px;
+  color: #999;
+  margin: 0;
+  padding: 8px 0;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   EMPTY & LOADING STATES
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+.empty-state,
+.empty-subsection {
+  text-align: center;
+  padding: 40px 20px;
+  color: #999;
+  font-size: 14px;
+}
+
+.investments-module.dark-mode .empty-state,
+.investments-module.dark-mode .empty-subsection {
+  color: #aaa;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 16px;
+}
+
+.empty-subsection {
+  padding: 20px;
+  background-color: #f9f9f9;
+  border-radius: 6px;
+  border: 1px dashed #ddd;
+}
+
+.investments-module.dark-mode .empty-subsection {
+  background-color: #1f1f1f;
+  border-color: #333;
+}
+
+.loading-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #2196F3;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.login-message {
+  text-align: center;
+  padding: 60px 20px;
+  font-size: 16px;
+  color: #666;
+}
+
+.investments-module.dark-mode .login-message {
+  color: #aaa;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   CARDS CONTAINERS
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+.policies-cards,
+.insurances-cards,
+.records-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 15px;
+}
+
+@media (max-width: 600px) {
+  .policies-cards,
+  .insurances-cards,
+  .records-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .card-header {
+    flex-direction: column;
+  }
+
+  .card-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   EXPIRED SECTION
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+.expired-section {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 2px solid #e0e0e0;
+}
+
+.investments-module.dark-mode .expired-section {
+  border-top-color: #333;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   RESPONSIVE DESIGN
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  .investments-container {
+    padding: 0;
+  }
+
+  .investments-title {
+    font-size: 22px;
+  }
+
+  .tab-content {
+    padding: 15px;
+  }
+
+  .tab-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .investments-tabs {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 5px;
+  }
+
+  .tab-button {
+    padding: 10px 15px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .card-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .investments-module {
+    padding: 10px;
+  }
+
+  .investments-title {
+    font-size: 18px;
+    margin-bottom: 15px;
+  }
+
+  .tab-content {
+    padding: 12px;
+    border-radius: 8px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .policies-cards,
+  .insurances-cards,
+  .records-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .tab-button {
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+
+  .action-btn {
+    padding: 8px 16px;
+    font-size: 12px;
+  }
+
+  .submit-btn,
+  .cancel-btn {
+    padding: 8px 16px;
+    font-size: 12px;
+  }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   COMPACT LIST LAYOUT STYLES
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+/* SIP List - Compact Table Layout */
+.sip-list-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1.5fr 1fr 1.5fr 2fr 1fr;
+  gap: 12px;
+  padding: 12px;
+  background-color: #f5f5f5;
+  border-radius: 6px 6px 0 0;
+  border-bottom: 2px solid #e0e0e0;
+  font-weight: 600;
+  font-size: 12px;
+  color: #666;
+}
+
+.investments-module.dark-mode .sip-list-header {
+  background-color: #2a2a2a;
+  border-bottom-color: #333;
+  color: #ccc;
+}
+
+.header-col {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sip-list-row {
+  border-bottom: 1px solid #e0e0e0;
+  background-color: white;
+  transition: background-color 0.2s ease;
+}
+
+.investments-module.dark-mode .sip-list-row {
+  background-color: #1f1f1f;
+  border-bottom-color: #333;
+}
+
+.sip-list-row:hover {
+  background-color: #fafafa;
+}
+
+.investments-module.dark-mode .sip-list-row:hover {
+  background-color: #252525;
+}
+
+.row-main {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1.5fr 1fr 1.5fr 2fr 1fr;
+  gap: 12px;
+  padding: 12px;
+  align-items: center;
+}
+
+.row-col {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: #333;
+}
+
+.investments-module.dark-mode .row-col {
+  color: #f0f0f0;
+}
+
+.row-col.highlight {
+  color: #2196F3;
+  font-weight: 600;
+}
+
+.investments-module.dark-mode .row-col.highlight {
+  color: #64b5f6;
+}
+
+.row-col.sip-name strong {
+  color: #2196F3;
+}
+
+.investments-module.dark-mode .row-col.sip-name strong {
+  color: #64b5f6;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background-color: #e3f2fd;
+  color: #1976D2;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.investments-module.dark-mode .badge {
+  background-color: #1e3a5f;
+  color: #64b5f6;
+}
+
+.row-details {
+  padding: 8px 12px;
+  background-color: #fafafa;
+  border-top: 1px solid #e0e0e0;
+  font-size: 12px;
+  color: #666;
+  display: flex;
+  gap: 8px;
+}
+
+.investments-module.dark-mode .row-details {
+  background-color: #252525;
+  border-top-color: #333;
+  color: #ccc;
+}
+
+.detail-label {
+  font-weight: 600;
+  min-width: 60px;
+}
+
+.topups-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+}
+
+.topup-inline-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background-color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+.investments-module.dark-mode .topup-inline-item {
+  background-color: #1f1f1f;
+  border-color: #333;
+}
+
+.topup-amount {
+  font-weight: 600;
+  color: #2196F3;
+}
+
+.investments-module.dark-mode .topup-amount {
+  color: #64b5f6;
+}
+
+.topup-date {
+  font-size: 11px;
+  color: #999;
+}
+
+.investments-module.dark-mode .topup-date {
+  color: #666;
+}
+
+.row-actions {
+  padding: 8px 12px;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  gap: 8px;
+}
+
+.investments-module.dark-mode .row-actions {
+  border-top-color: #333;
+}
+
+.add-topup-btn {
+  padding: 6px 12px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.add-topup-btn:hover {
+  background-color: #45a049;
+}
+
+/* Responsive adjustments for compact list */
+@media (max-width: 1024px) {
+  .sip-list-header,
+  .sip-list-row .row-main {
+    grid-template-columns: 2fr 1.2fr 1.2fr 1.2fr 1.2fr 0.8fr;
+  }
+
+  .header-col.sip-frequency,
+  .row-col.sip-frequency {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .sip-list-header,
+  .sip-list-row .row-main {
+    grid-template-columns: 2fr 1fr 1.5fr 0.8fr;
+    gap: 8px;
+  }
+
+  .header-col.sip-type,
+  .row-col.sip-type,
+  .header-col.sip-frequency,
+  .row-col.sip-frequency,
+  .header-col.sip-start,
+  .row-col.sip-start {
+    display: none;
+  }
+
+  .header-col.sip-name,
+  .row-col.sip-name {
+    min-width: 100px;
+  }
+
+  .header-col.sip-amount,
+  .row-col.sip-amount {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .header-col.sip-total,
+  .row-col.sip-total {
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .row-details {
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sip-list-header {
+    grid-template-columns: 2fr 1.2fr 0.8fr;
+    font-size: 11px;
+  }
+
+  .sip-list-row .row-main {
+    grid-template-columns: 2fr 1.2fr 0.8fr;
+    padding: 8px;
+  }
+
+  .header-col.sip-type,
+  .row-col.sip-type,
+  .header-col.sip-frequency,
+  .row-col.sip-frequency,
+  .header-col.sip-start,
+  .row-col.sip-start,
+  .header-col.sip-total,
+  .row-col.sip-total {
+    display: none;
+  }
+
+  .header-col.sip-amount::before {
+    content: "Amt";
+  }
+
+  .row-details {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .topups-inline {
+    flex-direction: column;
+  }
+
+  .add-topup-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .row-actions {
+    padding: 6px 8px;
+  }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   INSURANCE LIST - COMPACT TABLE LAYOUT
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+.insurance-list-header {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1.5fr 1fr 1fr 1.5fr 0.8fr;
+  gap: 12px;
+  padding: 12px;
+  background-color: #f5f5f5;
+  border-radius: 6px 6px 0 0;
+  border-bottom: 2px solid #e0e0e0;
+  font-weight: 600;
+  font-size: 12px;
+  color: #666;
+}
+
+.investments-module.dark-mode .insurance-list-header {
+  background-color: #2a2a2a;
+  border-bottom-color: #333;
+  color: #ccc;
+}
+
+.insurance-list-row {
+  border-bottom: 1px solid #e0e0e0;
+  background-color: white;
+  transition: background-color 0.2s ease;
+}
+
+.investments-module.dark-mode .insurance-list-row {
+  background-color: #1f1f1f;
+  border-bottom-color: #333;
+}
+
+.insurance-list-row:hover {
+  background-color: #fafafa;
+}
+
+.investments-module.dark-mode .insurance-list-row:hover {
+  background-color: #252525;
+}
+
+.insurance-list-row.expired {
+  opacity: 0.7;
+}
+
+.insurance-list-row .row-main {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1.5fr 1fr 1fr 1.5fr 0.8fr;
+  gap: 12px;
+  padding: 12px;
+  align-items: center;
+}
+
+.insurance-list-row .row-col.policy-name strong {
+  color: #2196F3;
+}
+
+.investments-module.dark-mode .insurance-list-row .row-col.policy-name strong {
+  color: #64b5f6;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-badge.active {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.status-badge.renewal-soon {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.status-badge.expired-status {
+  background-color: #ffebee;
+  color: #c62828;
+}
+
+.investments-module.dark-mode .status-badge.active {
+  background-color: rgba(76, 175, 80, 0.2);
+  color: #81c784;
+}
+
+.investments-module.dark-mode .status-badge.renewal-soon {
+  background-color: rgba(255, 193, 7, 0.2);
+  color: #fbc02d;
+}
+
+.investments-module.dark-mode .status-badge.expired-status {
+  background-color: rgba(244, 67, 54, 0.2);
+  color: #ef5350;
+}
+
+/* Responsive adjustments for insurance list */
+@media (max-width: 1024px) {
+  .insurance-list-header,
+  .insurance-list-row .row-main {
+    grid-template-columns: 2fr 1.5fr 1.5fr 1fr 1.5fr 0.8fr;
+  }
+
+  .header-col.policy-type,
+  .row-col.policy-type {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .insurance-list-header,
+  .insurance-list-row .row-main {
+    grid-template-columns: 2fr 1.5fr 1.5fr 0.8fr;
+  }
+
+  .header-col.policy-vendor,
+  .row-col.policy-vendor,
+  .header-col.policy-type,
+  .row-col.policy-type,
+  .header-col.policy-date,
+  .row-col.policy-date {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .insurance-list-header {
+    grid-template-columns: 2fr 1.5fr 0.8fr;
+    font-size: 11px;
+  }
+
+  .insurance-list-row .row-main {
+    grid-template-columns: 2fr 1.5fr 0.8fr;
+    padding: 10px;
+  }
+
+  .header-col.policy-amount,
+  .row-col.policy-amount,
+  .header-col.policy-vendor,
+  .row-col.policy-vendor,
+  .header-col.policy-type,
+  .row-col.policy-type,
+  .header-col.policy-status,
+  .row-col.policy-status,
+  .header-col.policy-date,
+  .row-col.policy-date {
+    display: none;
+  }
+
+  .row-details {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   VEHICLE INSURANCE LIST - COMPACT TABLE LAYOUT
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+.vehicle-list-header {
+  display: grid;
+  grid-template-columns: 1.5fr 1.5fr 1.5fr 1fr 1fr 1.5fr 0.8fr;
+  gap: 12px;
+  padding: 12px;
+  background-color: #f5f5f5;
+  border-radius: 6px 6px 0 0;
+  border-bottom: 2px solid #e0e0e0;
+  font-weight: 600;
+  font-size: 12px;
+  color: #666;
+}
+
+.investments-module.dark-mode .vehicle-list-header {
+  background-color: #2a2a2a;
+  border-bottom-color: #333;
+  color: #ccc;
+}
+
+.vehicle-list-row {
+  border-bottom: 1px solid #e0e0e0;
+  background-color: white;
+  transition: background-color 0.2s ease;
+}
+
+.investments-module.dark-mode .vehicle-list-row {
+  background-color: #1f1f1f;
+  border-bottom-color: #333;
+}
+
+.vehicle-list-row:hover {
+  background-color: #fafafa;
+}
+
+.investments-module.dark-mode .vehicle-list-row:hover {
+  background-color: #252525;
+}
+
+.vehicle-list-row.expired {
+  opacity: 0.7;
+}
+
+.vehicle-list-row .row-main {
+  display: grid;
+  grid-template-columns: 1.5fr 1.5fr 1.5fr 1fr 1fr 1.5fr 0.8fr;
+  gap: 12px;
+  padding: 12px;
+  align-items: center;
+}
+
+.vehicle-list-row .row-col.vehicle-number strong {
+  color: #2196F3;
+}
+
+.investments-module.dark-mode .vehicle-list-row .row-col.vehicle-number strong {
+  color: #64b5f6;
+}
+
+/* Responsive adjustments for vehicle list */
+@media (max-width: 1024px) {
+  .vehicle-list-header,
+  .vehicle-list-row .row-main {
+    grid-template-columns: 1.5fr 1.5fr 1.5fr 1fr 0.8fr;
+  }
+
+  .header-col.vehicle-status,
+  .row-col.vehicle-status {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .vehicle-list-header,
+  .vehicle-list-row .row-main {
+    grid-template-columns: 1.5fr 1.5fr 1.5fr 0.8fr;
+  }
+
+  .header-col.vehicle-vendor,
+  .row-col.vehicle-vendor,
+  .header-col.vehicle-status,
+  .row-col.vehicle-status,
+  .header-col.vehicle-expiry,
+  .row-col.vehicle-expiry {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .vehicle-list-header {
+    grid-template-columns: 1.5fr 0.8fr;
+    font-size: 11px;
+  }
+
+  .vehicle-list-row .row-main {
+    grid-template-columns: 1.5fr 0.8fr;
+    padding: 10px;
+  }
+
+  .header-col.vehicle-vendor,
+  .row-col.vehicle-vendor,
+  .header-col.vehicle-amount,
+  .row-col.vehicle-amount,
+  .header-col.vehicle-type,
+  .row-col.vehicle-type,
+  .header-col.vehicle-status,
+  .row-col.vehicle-status,
+  .header-col.vehicle-expiry,
+  .row-col.vehicle-expiry {
+    display: none;
+  }
+
+  .row-details {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   POLLUTION CERTIFICATE LIST - COMPACT TABLE LAYOUT
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+.pollution-list-header {
+  display: grid;
+  grid-template-columns: 1.5fr 1.2fr 1.2fr 1.2fr 1fr 1.2fr 0.8fr;
+  gap: 12px;
+  padding: 12px;
+  background-color: #f5f5f5;
+  border-radius: 6px 6px 0 0;
+  border-bottom: 2px solid #e0e0e0;
+  font-weight: 600;
+  font-size: 12px;
+  color: #666;
+}
+
+.investments-module.dark-mode .pollution-list-header {
+  background-color: #2a2a2a;
+  border-bottom-color: #333;
+  color: #ccc;
+}
+
+.pollution-list-row {
+  border-bottom: 1px solid #e0e0e0;
+  background-color: white;
+  transition: background-color 0.2s ease;
+}
+
+.investments-module.dark-mode .pollution-list-row {
+  background-color: #1f1f1f;
+  border-bottom-color: #333;
+}
+
+.pollution-list-row:hover {
+  background-color: #fafafa;
+}
+
+.investments-module.dark-mode .pollution-list-row:hover {
+  background-color: #252525;
+}
+
+.pollution-list-row.expired {
+  opacity: 0.7;
+}
+
+.pollution-list-row .row-main {
+  display: grid;
+  grid-template-columns: 1.5fr 1.2fr 1.2fr 1.2fr 1fr 1.2fr 0.8fr;
+  gap: 12px;
+  padding: 12px;
+  align-items: center;
+}
+
+.pollution-list-row .row-col.pollution-vehicle strong {
+  color: #2196F3;
+}
+
+.investments-module.dark-mode .pollution-list-row .row-col.pollution-vehicle strong {
+  color: #64b5f6;
+}
+
+/* Responsive adjustments for pollution list */
+@media (max-width: 1024px) {
+  .pollution-list-header,
+  .pollution-list-row .row-main {
+    grid-template-columns: 1.5fr 1.2fr 1.2fr 1.2fr 0.8fr;
+  }
+
+  .header-col.pollution-status,
+  .row-col.pollution-status {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .pollution-list-header,
+  .pollution-list-row .row-main {
+    grid-template-columns: 1.5fr 1.5fr 1.5fr 0.8fr;
+  }
+
+  .header-col.pollution-amount,
+  .row-col.pollution-amount,
+  .header-col.pollution-start,
+  .row-col.pollution-start,
+  .header-col.pollution-status,
+  .row-col.pollution-status,
+  .header-col.pollution-paid,
+  .row-col.pollution-paid {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .pollution-list-header {
+    grid-template-columns: 1.5fr 0.8fr;
+    font-size: 11px;
+  }
+
+  .pollution-list-row .row-main {
+    grid-template-columns: 1.5fr 0.8fr;
+    padding: 10px;
+  }
+
+  .header-col.pollution-amount,
+  .row-col.pollution-amount,
+  .header-col.pollution-start,
+  .row-col.pollution-start,
+  .header-col.pollution-expiry,
+  .row-col.pollution-expiry,
+  .header-col.pollution-status,
+  .row-col.pollution-status,
+  .header-col.pollution-paid,
+  .row-col.pollution-paid {
+    display: none;
+  }
+
+  .row-details {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+}
