@@ -1,4 +1,8 @@
+import { useState } from 'react';
+
 function SIPList({ sips, topUps, onEdit, onDelete, onAddTopUp, onDeleteTopUp, loading, darkMode }) {
+  const [selectedSIP, setSelectedSIP] = useState(null);
+
   const calculateTotalInvested = (sip) => {
     // Parse dates - handle both string (YYYY-MM-DD) and Date objects
     const parseDate = (dateInput) => {
@@ -58,104 +62,184 @@ function SIPList({ sips, topUps, onEdit, onDelete, onAddTopUp, onDeleteTopUp, lo
   }
 
   return (
-    <div className="sip-list">
-      {/* Table Header */}
-      <div className="sip-list-header">
-        <div className="header-col sip-name">Name</div>
-        <div className="header-col sip-type">Type</div>
-        <div className="header-col sip-amount">Amount</div>
-        <div className="header-col sip-frequency">Frequency</div>
-        <div className="header-col sip-start">Start Date</div>
-        <div className="header-col sip-total">Total Invested</div>
-        <div className="header-col sip-actions">Actions</div>
-      </div>
+    <div className="sip-list-container">
+      {/* SIP Cards List */}
+      <div className="sip-cards-list">
+        {sips.map((sip) => {
+          const sipTopUpsForThisSIP = getTopUpsForSIP(sip.id);
+          const totalInvested = calculateTotalInvested(sip);
+          const isSelected = selectedSIP && selectedSIP.id === sip.id;
 
-      {/* Table Rows */}
-      {sips.map((sip) => {
-        const sipTopUpsForThisSIP = getTopUpsForSIP(sip.id);
-        const totalInvested = calculateTotalInvested(sip);
+          return (
+            <div
+              key={sip.id}
+              className={`sip-card ${isSelected ? 'selected' : ''}`}
+              onClick={() => setSelectedSIP(sip)}
+            >
+              <div className="sip-card-content">
+                {/* SIP Details Section */}
+                <div className="sip-card-details">
+                  <h3 className="sip-card-name">{sip.sipName}</h3>
+                  <div className="sip-card-amount-frequency">
+                    ₹{sip.amount.toFixed(2)} • {sip.frequency}
+                  </div>
+                  <div className="sip-card-start-date">
+                    📅 {sip.startDate}
+                  </div>
+                </div>
 
-        return (
-          <div key={sip.id} className="sip-list-row">
-            <div className="row-main">
-              <div className="row-col sip-name">
-                <strong>{sip.sipName}</strong>
-              </div>
-              <div className="row-col sip-type">
-                <span className="badge">{sip.sipType}</span>
-              </div>
-              <div className="row-col sip-amount">
-                ₹{sip.amount.toFixed(2)}
-              </div>
-              <div className="row-col sip-frequency">
-                {sip.frequency}
-              </div>
-              <div className="row-col sip-start">
-                {sip.startDate}
-              </div>
-              <div className="row-col sip-total highlight">
-                <strong>₹{totalInvested.toFixed(2)}</strong>
-              </div>
-              <div className="row-col sip-actions">
-                <button
-                  className="icon-btn edit-btn"
-                  onClick={() => onEdit(sip)}
-                  title="Edit SIP"
-                >
-                  ✏️
-                </button>
-                <button
-                  className="icon-btn delete-btn"
-                  onClick={() => onDelete(sip.id)}
-                  title="Delete SIP"
-                >
-                  🗑️
-                </button>
-              </div>
-            </div>
-
-            {/* Notes row (if exists) */}
-            {sip.notes && (
-              <div className="row-details">
-                <span className="detail-label">Notes:</span> {sip.notes}
-              </div>
-            )}
-
-            {/* Top-ups row (if exists) */}
-            {sipTopUpsForThisSIP.length > 0 && (
-              <div className="row-details">
-                <span className="detail-label">Top-ups:</span>
-                <div className="topups-inline">
-                  {sipTopUpsForThisSIP.map((topUp) => (
-                    <div key={topUp.id} className="topup-inline-item">
-                      <span className="topup-amount">₹{topUp.topUpAmount.toFixed(2)}</span>
-                      <span className="topup-date">({topUp.date})</span>
-                      <button
-                        className="icon-btn delete-btn"
-                        onClick={() => onDeleteTopUp(topUp.id)}
-                        title="Delete top-up"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  ))}
+                {/* Edit Button */}
+                <div className="sip-card-actions">
+                  <button
+                    className="icon-btn edit-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(sip);
+                    }}
+                    title="Edit SIP"
+                  >
+                    ✏️
+                  </button>
                 </div>
               </div>
-            )}
+            </div>
+          );
+        })}
+      </div>
 
-            {/* Add top-up button */}
-            <div className="row-actions">
+      {/* Side Panel with Details */}
+      {selectedSIP && (
+        <>
+          {/* Overlay */}
+          <div 
+            className="sip-panel-overlay"
+            onClick={() => setSelectedSIP(null)}
+          ></div>
+
+          {/* Side Panel */}
+          <div className="sip-details-panel">
+            <div className="panel-header">
+              <h2>{selectedSIP.sipName}</h2>
               <button
-                className="add-topup-btn"
-                onClick={() => onAddTopUp(sip.id)}
-                title="Add top-up or lumpsum"
+                className="close-btn"
+                onClick={() => setSelectedSIP(null)}
+                title="Close panel"
               >
-                + Top-up
+                ✕
               </button>
             </div>
+
+            <div className="panel-content">
+              {/* SIP Type */}
+              <div className="detail-row">
+                <label>Type:</label>
+                <span className="detail-badge">{selectedSIP.sipType}</span>
+              </div>
+
+              {/* Amount */}
+              <div className="detail-row">
+                <label>Amount:</label>
+                <strong className="detail-value">₹{selectedSIP.amount.toFixed(2)}</strong>
+              </div>
+
+              {/* Frequency */}
+              <div className="detail-row">
+                <label>Frequency:</label>
+                <span className="detail-value">{selectedSIP.frequency}</span>
+              </div>
+
+              {/* Start Date */}
+              <div className="detail-row">
+                <label>Start Date:</label>
+                <span className="detail-value">{selectedSIP.startDate}</span>
+              </div>
+
+              {/* End Date */}
+              {selectedSIP.endDate && (
+                <div className="detail-row">
+                  <label>End Date:</label>
+                  <span className="detail-value">{selectedSIP.endDate}</span>
+                </div>
+              )}
+
+              {/* Total Invested */}
+              <div className="detail-row highlight">
+                <label>Total Invested:</label>
+                <strong className="detail-value">₹{calculateTotalInvested(selectedSIP).toFixed(2)}</strong>
+              </div>
+
+              {/* Notes */}
+              {selectedSIP.notes && (
+                <div className="detail-row">
+                  <label>Notes:</label>
+                  <span className="detail-value">{selectedSIP.notes}</span>
+                </div>
+              )}
+
+              {/* Top-ups Section */}
+              {getTopUpsForSIP(selectedSIP.id).length > 0 && (
+                <div className="topups-section">
+                  <h3 className="section-title">Top-ups</h3>
+                  <div className="topups-list">
+                    {getTopUpsForSIP(selectedSIP.id).map((topUp) => (
+                      <div key={topUp.id} className="topup-item">
+                        <div className="topup-info">
+                          <span className="topup-amount">₹{topUp.topUpAmount.toFixed(2)}</span>
+                          <span className="topup-date">{topUp.date}</span>
+                        </div>
+                        <button
+                          className="icon-btn delete-btn"
+                          onClick={() => {
+                            onDeleteTopUp(topUp.id);
+                            setSelectedSIP(null);
+                          }}
+                          title="Delete top-up"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Panel Actions */}
+              <div className="panel-actions">
+                <button
+                  className="action-btn edit-btn"
+                  onClick={() => {
+                    onEdit(selectedSIP);
+                    setSelectedSIP(null);
+                  }}
+                >
+                  ✏️ Edit SIP
+                </button>
+                <button
+                  className="action-btn topup-btn"
+                  onClick={() => {
+                    onAddTopUp(selectedSIP.id);
+                    setSelectedSIP(null);
+                  }}
+                >
+                  ➕ Add Top-up
+                </button>
+                <button
+                  className="action-btn delete-btn"
+                  onClick={() => {
+                    // eslint-disable-next-line no-restricted-globals
+                    if (confirm('Are you sure you want to delete this SIP?')) {
+                      onDelete(selectedSIP.id);
+                      setSelectedSIP(null);
+                    }
+                  }}
+                >
+                  🗑️ Delete SIP
+                </button>
+              </div>
+            </div>
           </div>
-        );
-      })}
+        </>
+      )}
     </div>
   );
 }

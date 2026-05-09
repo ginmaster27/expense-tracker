@@ -4942,6 +4942,63 @@
   color: #FF9800;
 }
 
+/* Contributions Section */
+.contributions-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.contributions-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.contributions-section-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 8px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Chart Header with Filter */
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.category-month-filter {
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.category-month-filter:hover {
+  border-color: var(--accent-primary);
+  background-color: var(--bg-primary);
+}
+
+.category-month-filter:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(91, 180, 80, 0.2);
+}
+
 /* Personal Expense Summary */
 .personal-expense-summary-card {
   grid-column: span 1;
@@ -5810,6 +5867,15 @@
   .transactions-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .chart-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .category-month-filter {
+    width: 100%;
   }
 
   .filter-buttons {

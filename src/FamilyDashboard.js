@@ -23,6 +23,7 @@ function FamilyDashboard({
 }) {
   const [selectedMember, setSelectedMember] = useState(null);
   const [filterType, setFilterType] = useState('all'); // all, expenses, income
+  const [categoryFilterMonth, setCategoryFilterMonth] = useState('current'); // 'current' or number 1-12 for all-time month selection
 
   if (!userGroup) {
     return (
@@ -136,6 +137,54 @@ function FamilyDashboard({
     return sortedBySpending;
   };
 
+  // Calculate member monthly contributions (expenses per member for current month)
+  const getMemberMonthlyContributions = () => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    
+    const contributions = {};
+    members.forEach(member => {
+      contributions[member.userId] = {
+        id: member.userId,
+        name: member.name,
+        spent: 0,
+        earned: 0,
+        balance: 0,
+        spendPercentage: 0
+      };
+    });
+
+    // Add shared expenses for this month
+    sharedExpenses.forEach(exp => {
+      if (exp.date && contributions[exp.createdBy]) {
+        const expDate = new Date(exp.date);
+        if (expDate.getMonth() === currentMonth && expDate.getFullYear() === currentYear) {
+          contributions[exp.createdBy].spent += exp.amount || 0;
+        }
+      }
+    });
+
+    // Add income for this month
+    income.forEach(inc => {
+      if (inc.date && contributions[inc.userId]) {
+        const incDate = new Date(inc.date);
+        if (incDate.getMonth() === currentMonth && incDate.getFullYear() === currentYear) {
+          contributions[inc.userId].earned += inc.amount || 0;
+        }
+      }
+    });
+
+    // Calculate balance and percentage
+    const sortedBySpending = Object.values(contributions).sort((a, b) => b.spent - a.spent);
+    sortedBySpending.forEach(member => {
+      member.balance = member.earned - member.spent;
+      member.spendPercentage = monthlyFamilyExpenses > 0 ? ((member.spent / monthlyFamilyExpenses) * 100).toFixed(1) : 0;
+    });
+
+    return sortedBySpending;
+  };
+
   const getMemberPersonalTotals = () => {
     const personalTotals = {};
     members.forEach(member => {
@@ -170,17 +219,45 @@ function FamilyDashboard({
   };
 
   // Get category breakdown
-  const getCategoryBreakdown = () => {
+  const getCategoryBreakdown = (monthFilter = 'current') => {
     const categories = {};
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
     sharedExpenses.forEach(exp => {
       const cat = exp.category || 'Other';
-      categories[cat] = (categories[cat] || 0) + (exp.amount || 0);
+      let includeExpense = false;
+
+      if (monthFilter === 'current') {
+        // Current month only
+        if (exp.date) {
+          const expDate = new Date(exp.date);
+          includeExpense = expDate.getMonth() === currentMonth && expDate.getFullYear() === currentYear;
+        }
+      } else if (monthFilter === 'all-time') {
+        // All time
+        includeExpense = true;
+      } else {
+        // Specific month across all years (for all-time view by month)
+        if (exp.date) {
+          const expDate = new Date(exp.date);
+          includeExpense = expDate.getMonth() === parseInt(monthFilter);
+        }
+      }
+
+      if (includeExpense) {
+        categories[cat] = (categories[cat] || 0) + (exp.amount || 0);
+      }
     });
+
+    const totalForChart = Object.values(categories).reduce((sum, val) => sum + val, 0);
+
     return Object.entries(categories)
       .map(([name, value]) => ({
         name,
         value,
-        percentage: totalFamilyExpenses > 0 ? ((value / totalFamilyExpenses) * 100).toFixed(1) : 0
+        percentage: totalForChart > 0 ? ((value / totalForChart) * 100).toFixed(1) : 0
       }))
       .sort((a, b) => b.value - a.value);
   };
@@ -464,8 +541,9 @@ function FamilyDashboard({
   };
 
   const memberContributions = getMemberContributions();
+  const memberMonthlyContributions = getMemberMonthlyContributions();
   const memberPersonalTotals = getMemberPersonalTotals();
-  const categoryBreakdown = getCategoryBreakdown();
+  const categoryBreakdown = getCategoryBreakdown(categoryFilterMonth);
   const incomeSourceBreakdown = getIncomeSourceBreakdown();
   const recentTransactions = getFilteredTransactions();
   const topSpender = getTopSpender();
@@ -558,42 +636,89 @@ function FamilyDashboard({
           <h2 className="card-heading">👥 Member Contributions</h2>
           <div className="contributions-table">
             {memberContributions.length > 0 ? (
-              <div className="table-wrapper">
-                {memberContributions.map((member, idx) => (
-                  <div
-                    key={member.id}
-                    className={`contribution-row ${selectedMember === member.id ? 'active' : ''}`}
-                    onClick={() => setSelectedMember(selectedMember === member.id ? null : member.id)}
-                  >
-                    <div className="row-member">
-                      <div className="member-avatar" style={{ backgroundColor: COLORS[idx % COLORS.length] }}>
-                        {member.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="member-info">
-                        <div className="member-name">{member.name}</div>
-                        <div className="member-stats">
-                          <span className="stat-income">📈 {formatCurrency(member.earned)}</span>
-                          <span className="stat-expense">📉 {formatCurrency(member.spent)}</span>
+              <>
+                {/* Current Month Contributions */}
+                <div className="contributions-section">
+                  <h3 className="contributions-section-title">📅 This Month</h3>
+                  <div className="table-wrapper">
+                    {memberMonthlyContributions.map((member, idx) => (
+                      <div
+                        key={`monthly-${member.id}`}
+                        className={`contribution-row ${selectedMember === `monthly-${member.id}` ? 'active' : ''}`}
+                        onClick={() => setSelectedMember(selectedMember === `monthly-${member.id}` ? null : `monthly-${member.id}`)}
+                      >
+                        <div className="row-member">
+                          <div className="member-avatar" style={{ backgroundColor: COLORS[idx % COLORS.length] }}>
+                            {member.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="member-info">
+                            <div className="member-name">{member.name}</div>
+                            <div className="member-stats">
+                              <span className="stat-income">📈 {formatCurrency(member.earned)}</span>
+                              <span className="stat-expense">📉 {formatCurrency(member.spent)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="member-contribution-details">
+                          <div className="spend-percentage">
+                            <div className="percentage-bar">
+                              <div 
+                                className="percentage-fill"
+                                style={{ width: `${member.spendPercentage}%` }}
+                              ></div>
+                            </div>
+                            <span className="percentage-label">{member.spendPercentage}%</span>
+                          </div>
+                          <div className={`member-balance ${member.balance >= 0 ? 'positive' : 'negative'}`}>
+                            {formatCurrency(member.balance)}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="member-contribution-details">
-                      <div className="spend-percentage">
-                        <div className="percentage-bar">
-                          <div 
-                            className="percentage-fill"
-                            style={{ width: `${member.spendPercentage}%` }}
-                          ></div>
-                        </div>
-                        <span className="percentage-label">{member.spendPercentage}%</span>
-                      </div>
-                      <div className={`member-balance ${member.balance >= 0 ? 'positive' : 'negative'}`}>
-                        {formatCurrency(member.balance)}
-                      </div>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+
+                {/* Total Contributions */}
+                <div className="contributions-section">
+                  <h3 className="contributions-section-title">📊 Total (All Time)</h3>
+                  <div className="table-wrapper">
+                    {memberContributions.map((member, idx) => (
+                      <div
+                        key={`total-${member.id}`}
+                        className={`contribution-row ${selectedMember === `total-${member.id}` ? 'active' : ''}`}
+                        onClick={() => setSelectedMember(selectedMember === `total-${member.id}` ? null : `total-${member.id}`)}
+                      >
+                        <div className="row-member">
+                          <div className="member-avatar" style={{ backgroundColor: COLORS[idx % COLORS.length] }}>
+                            {member.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="member-info">
+                            <div className="member-name">{member.name}</div>
+                            <div className="member-stats">
+                              <span className="stat-income">📈 {formatCurrency(member.earned)}</span>
+                              <span className="stat-expense">📉 {formatCurrency(member.spent)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="member-contribution-details">
+                          <div className="spend-percentage">
+                            <div className="percentage-bar">
+                              <div 
+                                className="percentage-fill"
+                                style={{ width: `${member.spendPercentage}%` }}
+                              ></div>
+                            </div>
+                            <span className="percentage-label">{member.spendPercentage}%</span>
+                          </div>
+                          <div className={`member-balance ${member.balance >= 0 ? 'positive' : 'negative'}`}>
+                            {formatCurrency(member.balance)}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
             ) : (
               <p className="no-data">No member data available</p>
             )}
@@ -630,7 +755,32 @@ function FamilyDashboard({
         {/* Category Breakdown */}
         {categoryBreakdown.length > 0 && (
           <div className="family-card category-breakdown-card">
-            <h2 className="card-heading">📊 Expense Categories</h2>
+            <div className="chart-header">
+              <h2 className="card-heading">📊 Expense Categories</h2>
+              <select
+                className="category-month-filter"
+                value={categoryFilterMonth}
+                onChange={(e) => setCategoryFilterMonth(e.target.value)}
+                title="Filter expenses by month"
+              >
+                <option value="current">Current Month</option>
+                <option value="all-time">All Time</option>
+                <optgroup label="Specific Month (All Years)">
+                  <option value="0">January</option>
+                  <option value="1">February</option>
+                  <option value="2">March</option>
+                  <option value="3">April</option>
+                  <option value="4">May</option>
+                  <option value="5">June</option>
+                  <option value="6">July</option>
+                  <option value="7">August</option>
+                  <option value="8">September</option>
+                  <option value="9">October</option>
+                  <option value="10">November</option>
+                  <option value="11">December</option>
+                </optgroup>
+              </select>
+            </div>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
