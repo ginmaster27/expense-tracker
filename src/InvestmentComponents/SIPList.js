@@ -66,8 +66,6 @@ function SIPList({ sips, topUps, onEdit, onDelete, onAddTopUp, onDeleteTopUp, lo
       {/* SIP Cards List */}
       <div className="sip-cards-list">
         {sips.map((sip) => {
-          const sipTopUpsForThisSIP = getTopUpsForSIP(sip.id);
-          const totalInvested = calculateTotalInvested(sip);
           const isSelected = selectedSIP && selectedSIP.id === sip.id;
 
           return (
