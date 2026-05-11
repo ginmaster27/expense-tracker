@@ -975,6 +975,10 @@
 .sip-card-start-date {
   font-size: 0.85rem;
   color: #666;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .investments-module.dark-mode .sip-card-start-date {
@@ -1258,8 +1262,8 @@
 
 /* Panel Actions */
 .panel-actions {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 10px;
   padding: 20px;
   border-top: 1px solid #e0e0e0;
@@ -1272,11 +1276,11 @@
 }
 
 .action-btn {
-  padding: 12px 16px;
+  padding: 10px 20px;
   border: none;
   border-radius: 6px;
-  font-size: 0.95rem;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
   text-align: center;
@@ -1303,12 +1307,12 @@
 }
 
 .action-btn.delete-btn {
-  background-color: #f44336;
+  background-color: #d32f2f;
   color: white;
 }
 
 .action-btn.delete-btn:hover {
-  background-color: #da190b;
+  background-color: #b71c1c;
   transform: translateY(-2px);
 }
 
@@ -1640,7 +1644,7 @@
 
 .insurance-list-header {
   display: grid;
-  grid-template-columns: 2fr 1.5fr 1.5fr 1fr 1fr 1.5fr 0.8fr;
+  grid-template-columns: 2fr 1.5fr 1.5fr 0.8fr;
   gap: 12px;
   padding: 12px;
   background-color: #f5f5f5;
@@ -1683,7 +1687,7 @@
 
 .insurance-list-row .row-main {
   display: grid;
-  grid-template-columns: 2fr 1.5fr 1.5fr 1fr 1fr 1.5fr 0.8fr;
+  grid-template-columns: 2fr 1.5fr 1.5fr 0.8fr;
   gap: 12px;
   padding: 12px;
   align-items: center;
@@ -1695,6 +1699,31 @@
 
 .investments-module.dark-mode .insurance-list-row .row-col.policy-name strong {
   color: #64b5f6;
+}
+
+.row-col.policy-amount,
+.row-col.vehicle-amount,
+.row-col.policy-date,
+.row-col.vehicle-expiry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.summary-separator {
+  color: #999;
+  font-weight: 500;
+}
+
+.row-col.policy-date,
+.row-col.vehicle-expiry {
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.investments-module.dark-mode .row-col.policy-date,
+.investments-module.dark-mode .row-col.vehicle-expiry {
+  color: #ccc;
 }
 
 .status-badge {
@@ -1740,12 +1769,7 @@
 @media (max-width: 1024px) {
   .insurance-list-header,
   .insurance-list-row .row-main {
-    grid-template-columns: 2fr 1.5fr 1.5fr 1fr 1.5fr 0.8fr;
-  }
-
-  .header-col.policy-type,
-  .row-col.policy-type {
-    display: none;
+    grid-template-columns: 2fr 1.5fr 1.5fr 0.8fr;
   }
 }
 
@@ -1758,15 +1782,6 @@
   .insurance-list-row .row-main {
     grid-template-columns: 1.5fr 1.5fr 1.5fr 0.8fr;
     padding: 12px;
-  }
-
-  .header-col.policy-vendor,
-  .row-col.policy-vendor,
-  .header-col.policy-type,
-  .row-col.policy-type,
-  .header-col.policy-status,
-  .row-col.policy-status {
-    display: none;
   }
 
   .row-col.policy-name {
@@ -1848,7 +1863,7 @@
 
 .vehicle-list-header {
   display: grid;
-  grid-template-columns: 1.5fr 1.5fr 1.5fr 1fr 1fr 1.5fr 0.8fr;
+  grid-template-columns: 1.5fr 1.5fr 1.5fr 0.8fr;
   gap: 12px;
   padding: 12px;
   background-color: #f5f5f5;
@@ -1891,7 +1906,7 @@
 
 .vehicle-list-row .row-main {
   display: grid;
-  grid-template-columns: 1.5fr 1.5fr 1.5fr 1fr 1fr 1.5fr 0.8fr;
+  grid-template-columns: 1.5fr 1.5fr 1.5fr 0.8fr;
   gap: 12px;
   padding: 12px;
   align-items: center;
@@ -1909,12 +1924,7 @@
 @media (max-width: 1024px) {
   .vehicle-list-header,
   .vehicle-list-row .row-main {
-    grid-template-columns: 1.5fr 1.5fr 1.5fr 1fr 0.8fr;
-  }
-
-  .header-col.vehicle-status,
-  .row-col.vehicle-status {
-    display: none;
+    grid-template-columns: 1.5fr 1.5fr 1.5fr 0.8fr;
   }
 }
 
@@ -1927,15 +1937,6 @@
   .vehicle-list-row .row-main {
     grid-template-columns: 1.5fr 1.5fr 1.5fr 0.8fr;
     padding: 12px;
-  }
-
-  .header-col.vehicle-vendor,
-  .row-col.vehicle-vendor,
-  .header-col.vehicle-type,
-  .row-col.vehicle-type,
-  .header-col.vehicle-status,
-  .row-col.vehicle-status {
-    display: none;
   }
 
   .row-col.vehicle-number {
@@ -1971,15 +1972,6 @@
     gap: 8px;
   }
 
-  .header-col.vehicle-vendor,
-  .row-col.vehicle-vendor,
-  .header-col.vehicle-type,
-  .row-col.vehicle-type,
-  .header-col.vehicle-status,
-  .row-col.vehicle-status {
-    display: none;
-  }
-
   .row-col.vehicle-number {
     grid-column: 1;
   }
@@ -2002,7 +1994,7 @@
   }
 
   .header-col.vehicle-expiry::before {
-    content: "Expiry";
+    content: "Renewal";
   }
 
   .row-details {

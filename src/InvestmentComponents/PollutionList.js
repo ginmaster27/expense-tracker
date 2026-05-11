@@ -17,57 +17,50 @@ function PollutionList({ records, onEdit, onDelete, loading, darkMode }) {
 
   const activeRecords = records.filter((r) => !isExpired(r.expiryDate));
   const expiredRecords = records.filter((r) => isExpired(r.expiryDate));
+  const orderedRecords = [...activeRecords, ...expiredRecords];
+  const formatAmount = (amount) => `₹${(parseFloat(amount) || 0).toFixed(2)}`;
+  const getPollutionStatus = (record) => {
+    if (isExpired(record.expiryDate)) {
+      return { label: 'Expired', className: 'expired-status' };
+    }
+    if (isUpcomingExpiry(record.expiryDate)) {
+      return { label: 'Expiring', className: 'renewal-soon' };
+    }
+    return { label: 'Active', className: 'active' };
+  };
 
   if (loading) {
     return <div className="loading-state">Loading pollution certificates...</div>;
   }
 
   return (
-    <div className="pollution-list">
-      {/* Table Header */}
-      <div className="pollution-list-header">
-        <div className="header-col pollution-vehicle">Vehicle #</div>
-        <div className="header-col pollution-amount">Amount</div>
-        <div className="header-col pollution-start">Start Date</div>
-        <div className="header-col pollution-expiry">Expiry Date</div>
-        <div className="header-col pollution-status">Status</div>
-        <div className="header-col pollution-paid">Who Paid</div>
-        <div className="header-col pollution-actions">Actions</div>
-      </div>
+    <div className="sip-list-container pollution-list">
+      {orderedRecords.length > 0 && (
+        <div className="sip-cards-list">
+          {orderedRecords.map((record) => {
+            const expired = isExpired(record.expiryDate);
+            const isSelected = selectedRecord && selectedRecord.id === record.id;
+            const status = getPollutionStatus(record);
 
-      {/* Active Certificates */}
-      {activeRecords.length > 0 && (
-        <>
-          {activeRecords.map((record) => (
-            <div
-              key={record.id}
-              className="pollution-list-row"
-              onClick={() => setSelectedRecord(record)}
-            >
-              <div className="row-main">
-                <div className="row-col pollution-vehicle">
-                  <strong>{record.vehicleNumber}</strong>
-                </div>
-                <div className="row-col pollution-amount highlight">
-                  <strong>₹{record.amount.toFixed(2)}</strong>
-                </div>
-                <div className="row-col pollution-start">
-                  {record.startDate}
-                </div>
-                <div className="row-col pollution-expiry">
-                  {record.expiryDate}
-                </div>
-                <div className="row-col pollution-status">
-                  {isUpcomingExpiry(record.expiryDate) ? (
-                    <span className="status-badge renewal-soon">⚠️ Expiring</span>
-                  ) : (
-                    <span className="status-badge active">✅ Active</span>
-                  )}
-                </div>
-                <div className="row-col pollution-paid">
-                  {record.whoPaid}
-                </div>
-                <div className="row-col pollution-actions">
+            return (
+              <div
+                key={record.id}
+                className={`sip-card pollution-card ${expired ? 'expired' : ''} ${isSelected ? 'selected' : ''}`}
+                onClick={() => setSelectedRecord(record)}
+              >
+                <div className="sip-card-content">
+                  <div className="sip-card-details">
+                    <h3 className="sip-card-name">{record.vehicleNumber}</h3>
+                    <div className="sip-card-amount-frequency">
+                      {formatAmount(record.amount)} • {record.whoPaid || '-'}
+                    </div>
+                    <div className="sip-card-start-date">
+                      Expiry: {record.expiryDate || '-'}
+                      <span className={`status-badge ${status.className}`}>{status.label}</span>
+                    </div>
+                  </div>
+
+                  <div className="sip-card-actions">
                   <button
                     className="icon-btn edit-btn"
                     onClick={(e) => {
@@ -90,80 +83,13 @@ function PollutionList({ records, onEdit, onDelete, loading, darkMode }) {
                   </button>
                 </div>
               </div>
-
-              {record.notes && (
-                <div className="row-details">
-                  <span className="detail-label">Notes:</span> {record.notes}
-                </div>
-              )}
             </div>
-          ))}
-        </>
+            );
+          })}
+        </div>
       )}
 
-      {/* Expired Certificates */}
-      {expiredRecords.length > 0 && (
-        <>
-          {expiredRecords.map((record) => (
-            <div
-              key={record.id}
-              className="pollution-list-row expired"
-              onClick={() => setSelectedRecord(record)}
-            >
-              <div className="row-main">
-                <div className="row-col pollution-vehicle">
-                  <strong>{record.vehicleNumber}</strong>
-                </div>
-                <div className="row-col pollution-amount">
-                  ₹{record.amount.toFixed(2)}
-                </div>
-                <div className="row-col pollution-start">
-                  {record.startDate}
-                </div>
-                <div className="row-col pollution-expiry">
-                  {record.expiryDate}
-                </div>
-                <div className="row-col pollution-status">
-                  <span className="status-badge expired-status">❌ Expired</span>
-                </div>
-                <div className="row-col pollution-paid">
-                  {record.whoPaid}
-                </div>
-                <div className="row-col pollution-actions">
-                  <button
-                    className="icon-btn edit-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEdit(record);
-                    }}
-                    title="Edit pollution certificate"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    className="icon-btn delete-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(record.id);
-                    }}
-                    title="Delete pollution certificate"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-
-              {record.notes && (
-                <div className="row-details">
-                  <span className="detail-label">Notes:</span> {record.notes}
-                </div>
-              )}
-            </div>
-          ))}
-        </>
-      )}
-
-      {activeRecords.length === 0 && expiredRecords.length === 0 && (
+      {orderedRecords.length === 0 && (
         <div className="empty-state">
           <p>🌱 No pollution certificates yet. Add your first certificate to get started!</p>
         </div>
@@ -208,6 +134,14 @@ function PollutionList({ records, onEdit, onDelete, loading, darkMode }) {
                 <span className="detail-label">Expiry Date:</span>
                 <span className="detail-value">
                   {selectedRecord.expiryDate || '-'}
+                </span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Status:</span>
+                <span className="detail-value">
+                  <span className={`status-badge ${getPollutionStatus(selectedRecord).className}`}>
+                    {getPollutionStatus(selectedRecord).label}
+                  </span>
                 </span>
               </div>
               <div className="detail-row">

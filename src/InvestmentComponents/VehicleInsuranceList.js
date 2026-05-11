@@ -18,57 +18,52 @@ function VehicleInsuranceList({ vehicleInsurances, onEdit, onDelete, loading, da
 
   const activeInsurances = vehicleInsurances.filter((v) => !isExpired(v.expiryDate));
   const expiredInsurances = vehicleInsurances.filter((v) => isExpired(v.expiryDate));
+  const orderedInsurances = [...activeInsurances, ...expiredInsurances];
+  const formatAmount = (amount) => `₹${(parseFloat(amount) || 0).toFixed(2)}`;
+  const getFrequency = (vehicle) => vehicle.frequency || 'Yearly';
+  const getRenewalDate = (vehicle) => vehicle.renewalDate || '-';
+  const getVehicleStatus = (vehicle) => {
+    if (isExpired(vehicle.expiryDate)) {
+      return { label: 'Expired', className: 'expired-status' };
+    }
+    if (isUpcomingRenewal(vehicle.renewalDate)) {
+      return { label: 'Renewing', className: 'renewal-soon' };
+    }
+    return { label: 'Active', className: 'active' };
+  };
 
   if (loading) {
     return <div className="loading-state">Loading vehicle insurance policies...</div>;
   }
 
   return (
-    <div className="vehicle-insurance-list">
-      {/* Table Header */}
-      <div className="vehicle-list-header">
-        <div className="header-col vehicle-number">Vehicle #</div>
-        <div className="header-col vehicle-vendor">Vendor</div>
-        <div className="header-col vehicle-amount">Amount</div>
-        <div className="header-col vehicle-type">Type</div>
-        <div className="header-col vehicle-status">Status</div>
-        <div className="header-col vehicle-expiry">Expiry Date</div>
-        <div className="header-col vehicle-actions">Actions</div>
-      </div>
+    <div className="sip-list-container vehicle-insurance-list">
+      {orderedInsurances.length > 0 && (
+        <div className="sip-cards-list">
+          {orderedInsurances.map((vehicle) => {
+            const expired = isExpired(vehicle.expiryDate);
+            const isSelected = selectedVehicle && selectedVehicle.id === vehicle.id;
+            const status = getVehicleStatus(vehicle);
 
-      {/* Active Insurance */}
-      {activeInsurances.length > 0 && (
-        <>
-          {activeInsurances.map((vehicle) => (
-            <div
-              key={vehicle.id}
-              className="vehicle-list-row"
-              onClick={() => setSelectedVehicle(vehicle)}
-            >
-              <div className="row-main">
-                <div className="row-col vehicle-number">
-                  <strong>{vehicle.vehicleNumber}</strong>
-                </div>
-                <div className="row-col vehicle-vendor">
-                  {vehicle.vendor}
-                </div>
-                <div className="row-col vehicle-amount highlight">
-                  <strong>₹{vehicle.amount.toFixed(2)}</strong>
-                </div>
-                <div className="row-col vehicle-type">
-                  <span className="badge">{vehicle.policyType}</span>
-                </div>
-                <div className="row-col vehicle-status">
-                  {isUpcomingRenewal(vehicle.renewalDate) ? (
-                    <span className="status-badge renewal-soon">⚠️ Renewing</span>
-                  ) : (
-                    <span className="status-badge active">✅ Active</span>
-                  )}
-                </div>
-                <div className="row-col vehicle-expiry">
-                  {vehicle.expiryDate}
-                </div>
-                <div className="row-col vehicle-actions">
+            return (
+              <div
+                key={vehicle.id}
+                className={`sip-card vehicle-insurance-card ${expired ? 'expired' : ''} ${isSelected ? 'selected' : ''}`}
+                onClick={() => setSelectedVehicle(vehicle)}
+              >
+                <div className="sip-card-content">
+                  <div className="sip-card-details">
+                    <h3 className="sip-card-name">{vehicle.vehicleNumber}</h3>
+                    <div className="sip-card-amount-frequency">
+                      {formatAmount(vehicle.amount)} • {getFrequency(vehicle)}
+                    </div>
+                    <div className="sip-card-start-date">
+                      Renewal: {getRenewalDate(vehicle)}
+                      <span className={`status-badge ${status.className}`}>{status.label}</span>
+                    </div>
+                  </div>
+
+                  <div className="sip-card-actions">
                   <button
                     className="icon-btn edit-btn"
                     onClick={(e) => {
@@ -91,80 +86,13 @@ function VehicleInsuranceList({ vehicleInsurances, onEdit, onDelete, loading, da
                   </button>
                 </div>
               </div>
-
-              {vehicle.notes && (
-                <div className="row-details">
-                  <span className="detail-label">Notes:</span> {vehicle.notes}
-                </div>
-              )}
             </div>
-          ))}
-        </>
+            );
+          })}
+        </div>
       )}
 
-      {/* Expired Insurance */}
-      {expiredInsurances.length > 0 && (
-        <>
-          {expiredInsurances.map((vehicle) => (
-            <div
-              key={vehicle.id}
-              className="vehicle-list-row expired"
-              onClick={() => setSelectedVehicle(vehicle)}
-            >
-              <div className="row-main">
-                <div className="row-col vehicle-number">
-                  <strong>{vehicle.vehicleNumber}</strong>
-                </div>
-                <div className="row-col vehicle-vendor">
-                  {vehicle.vendor}
-                </div>
-                <div className="row-col vehicle-amount">
-                  ₹{vehicle.amount.toFixed(2)}
-                </div>
-                <div className="row-col vehicle-type">
-                  <span className="badge">{vehicle.policyType}</span>
-                </div>
-                <div className="row-col vehicle-status">
-                  <span className="status-badge expired-status">❌ Expired</span>
-                </div>
-                <div className="row-col vehicle-expiry">
-                  {vehicle.expiryDate}
-                </div>
-                <div className="row-col vehicle-actions">
-                  <button
-                    className="icon-btn edit-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEdit(vehicle);
-                    }}
-                    title="Edit vehicle insurance"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    className="icon-btn delete-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(vehicle.id);
-                    }}
-                    title="Delete vehicle insurance"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-
-              {vehicle.notes && (
-                <div className="row-details">
-                  <span className="detail-label">Notes:</span> {vehicle.notes}
-                </div>
-              )}
-            </div>
-          ))}
-        </>
-      )}
-
-      {activeInsurances.length === 0 && expiredInsurances.length === 0 && (
+      {orderedInsurances.length === 0 && (
         <div className="empty-state">
           <p>🚗 No vehicle insurance policies yet. Add your first policy to get started!</p>
         </div>
@@ -207,6 +135,14 @@ function VehicleInsuranceList({ vehicleInsurances, onEdit, onDelete, loading, da
                 <span className="detail-label">Policy Number:</span>
                 <span className="detail-value">
                   {selectedVehicle.policyNumber || '-'}
+                </span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Status:</span>
+                <span className="detail-value">
+                  <span className={`status-badge ${getVehicleStatus(selectedVehicle).className}`}>
+                    {getVehicleStatus(selectedVehicle).label}
+                  </span>
                 </span>
               </div>
               <div className="detail-row">

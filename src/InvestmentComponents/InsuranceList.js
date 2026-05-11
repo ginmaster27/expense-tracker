@@ -20,57 +20,51 @@ function InsuranceList({ policies, onEdit, onDelete, loading, darkMode }) {
 
   const activePolicies = policies.filter((p) => !isExpired(p.renewalDate, p.maturityDate));
   const expiredPolicies = policies.filter((p) => isExpired(p.renewalDate, p.maturityDate));
+  const orderedPolicies = [...activePolicies, ...expiredPolicies];
+  const formatAmount = (amount) => `₹${(parseFloat(amount) || 0).toFixed(2)}`;
+  const getRenewalDate = (policy) => policy.renewalDate || policy.maturityDate || '-';
+  const getPolicyStatus = (policy) => {
+    if (isExpired(policy.renewalDate, policy.maturityDate)) {
+      return { label: 'Expired', className: 'expired-status' };
+    }
+    if (isUpcomingRenewal(policy.renewalDate)) {
+      return { label: 'Renewing', className: 'renewal-soon' };
+    }
+    return { label: 'Active', className: 'active' };
+  };
 
   if (loading) {
     return <div className="loading-state">Loading insurance policies...</div>;
   }
 
   return (
-    <div className="insurance-list">
-      {/* Table Header */}
-      <div className="insurance-list-header">
-        <div className="header-col policy-name">Policy Name</div>
-        <div className="header-col policy-vendor">Vendor</div>
-        <div className="header-col policy-amount">Amount</div>
-        <div className="header-col policy-type">Type</div>
-        <div className="header-col policy-status">Status</div>
-        <div className="header-col policy-date">Renewal Date</div>
-        <div className="header-col policy-actions">Actions</div>
-      </div>
+    <div className="sip-list-container insurance-list">
+      {orderedPolicies.length > 0 && (
+        <div className="sip-cards-list">
+          {orderedPolicies.map((policy) => {
+            const expired = isExpired(policy.renewalDate, policy.maturityDate);
+            const isSelected = selectedPolicy && selectedPolicy.id === policy.id;
+            const status = getPolicyStatus(policy);
 
-      {/* Active Policies */}
-      {activePolicies.length > 0 && (
-        <>
-          {activePolicies.map((policy) => (
-            <div
-              key={policy.id}
-              className="insurance-list-row"
-              onClick={() => setSelectedPolicy(policy)}
-            >
-              <div className="row-main">
-                <div className="row-col policy-name">
-                  <strong>{policy.policyName}</strong>
-                </div>
-                <div className="row-col policy-vendor">
-                  {policy.vendor}
-                </div>
-                <div className="row-col policy-amount highlight">
-                  <strong>₹{policy.amount.toFixed(2)}</strong>
-                </div>
-                <div className="row-col policy-type">
-                  <span className="badge">{policy.policyType}</span>
-                </div>
-                <div className="row-col policy-status">
-                  {isUpcomingRenewal(policy.renewalDate) ? (
-                    <span className="status-badge renewal-soon">⚠️ Renewing</span>
-                  ) : (
-                    <span className="status-badge active">✅ Active</span>
-                  )}
-                </div>
-                <div className="row-col policy-date">
-                  {policy.renewalDate || policy.maturityDate || '-'}
-                </div>
-                <div className="row-col policy-actions">
+            return (
+              <div
+                key={policy.id}
+                className={`sip-card insurance-card ${expired ? 'expired' : ''} ${isSelected ? 'selected' : ''}`}
+                onClick={() => setSelectedPolicy(policy)}
+              >
+                <div className="sip-card-content">
+                  <div className="sip-card-details">
+                    <h3 className="sip-card-name">{policy.policyName}</h3>
+                    <div className="sip-card-amount-frequency">
+                      {formatAmount(policy.amount)} • {policy.frequency || '-'}
+                    </div>
+                    <div className="sip-card-start-date">
+                      Renewal: {getRenewalDate(policy)}
+                      <span className={`status-badge ${status.className}`}>{status.label}</span>
+                    </div>
+                  </div>
+
+                  <div className="sip-card-actions">
                   <button
                     className="icon-btn edit-btn"
                     onClick={(e) => {
@@ -93,80 +87,13 @@ function InsuranceList({ policies, onEdit, onDelete, loading, darkMode }) {
                   </button>
                 </div>
               </div>
-
-              {policy.notes && (
-                <div className="row-details">
-                  <span className="detail-label">Notes:</span> {policy.notes}
-                </div>
-              )}
             </div>
-          ))}
-        </>
+            );
+          })}
+        </div>
       )}
 
-      {/* Expired Policies */}
-      {expiredPolicies.length > 0 && (
-        <>
-          {expiredPolicies.map((policy) => (
-            <div
-              key={policy.id}
-              className="insurance-list-row expired"
-              onClick={() => setSelectedPolicy(policy)}
-            >
-              <div className="row-main">
-                <div className="row-col policy-name">
-                  <strong>{policy.policyName}</strong>
-                </div>
-                <div className="row-col policy-vendor">
-                  {policy.vendor}
-                </div>
-                <div className="row-col policy-amount">
-                  ₹{policy.amount.toFixed(2)}
-                </div>
-                <div className="row-col policy-type">
-                  <span className="badge">{policy.policyType}</span>
-                </div>
-                <div className="row-col policy-status">
-                  <span className="status-badge expired-status">❌ Expired</span>
-                </div>
-                <div className="row-col policy-date">
-                  {policy.renewalDate || policy.maturityDate || '-'}
-                </div>
-                <div className="row-col policy-actions">
-                  <button
-                    className="icon-btn edit-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEdit(policy);
-                    }}
-                    title="Edit policy"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    className="icon-btn delete-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(policy.id);
-                    }}
-                    title="Delete policy"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-
-              {policy.notes && (
-                <div className="row-details">
-                  <span className="detail-label">Notes:</span> {policy.notes}
-                </div>
-              )}
-            </div>
-          ))}
-        </>
-      )}
-
-      {activePolicies.length === 0 && expiredPolicies.length === 0 && (
+      {orderedPolicies.length === 0 && (
         <div className="empty-state">
           <p>🛡️ No insurance policies yet. Add your first policy to get started!</p>
         </div>
@@ -209,6 +136,14 @@ function InsuranceList({ policies, onEdit, onDelete, loading, darkMode }) {
                 <span className="detail-label">Policy Number:</span>
                 <span className="detail-value">
                   {selectedPolicy.policyNumber || '-'}
+                </span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Status:</span>
+                <span className="detail-value">
+                  <span className={`status-badge ${getPolicyStatus(selectedPolicy).className}`}>
+                    {getPolicyStatus(selectedPolicy).label}
+                  </span>
                 </span>
               </div>
               <div className="detail-row">
