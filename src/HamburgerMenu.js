@@ -1,7 +1,15 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-function HamburgerMenu({ user, onLogout, userGroup, darkMode }) {
+function HamburgerMenu({
+  user,
+  onLogout,
+  onSignIn,
+  userGroup,
+  darkMode,
+  onOpenFamilyGroup,
+  onOpenFamilyDashboard
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -12,6 +20,16 @@ function HamburgerMenu({ user, onLogout, userGroup, darkMode }) {
 
   const handleLogout = () => {
     onLogout();
+    setIsOpen(false);
+  };
+
+  const handleAction = (action, path) => {
+    if (path) {
+      navigate(path);
+    }
+    if (action) {
+      action();
+    }
     setIsOpen(false);
   };
 
@@ -77,16 +95,20 @@ function HamburgerMenu({ user, onLogout, userGroup, darkMode }) {
               >
                 💼 Investments & Policies
               </button>
-              {userGroup && (
+              {userGroup && onOpenFamilyDashboard && (
                 <button
                   className="menu-item"
-                  onClick={() => {
-                    navigate('/');
-                    setIsOpen(false);
-                    // The app will handle family dashboard toggle
-                  }}
+                  onClick={() => handleAction(onOpenFamilyDashboard, '/')}
                 >
-                  👨‍👩‍👧‍👦 Family Group
+                  👨‍👩‍👧‍👦 Family Dashboard
+                </button>
+              )}
+              {onOpenFamilyGroup && (
+                <button
+                  className="menu-item"
+                  onClick={() => handleAction(onOpenFamilyGroup)}
+                >
+                  👥 Family Group
                 </button>
               )}
             </nav>
@@ -100,7 +122,7 @@ function HamburgerMenu({ user, onLogout, userGroup, darkMode }) {
                 🚪 Logout
               </button>
             ) : (
-              <button className="menu-item login-btn">
+              <button className="menu-item login-btn" onClick={() => handleAction(onSignIn)}>
                 🔐 Sign In
               </button>
             )}

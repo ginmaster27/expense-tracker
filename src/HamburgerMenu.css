@@ -8,7 +8,7 @@
 
 /* Hamburger Toggle Button */
 .hamburger-toggle {
-  display: none;
+  display: flex;
   flex-direction: column;
   gap: 5px;
   background: none;
@@ -17,12 +17,6 @@
   padding: 8px;
   border-radius: 6px;
   transition: all 0.3s ease;
-}
-
-@media (max-width: 768px) {
-  .hamburger-toggle {
-    display: flex;
-  }
 }
 
 .hamburger-toggle span {
@@ -245,9 +239,13 @@
   background-color: rgba(102, 187, 106, 0.1);
 }
 
-/* Desktop Hide */
 @media (min-width: 769px) {
   .hamburger-menu-wrapper {
-    display: none;
+    display: block;
+  }
+
+  .hamburger-menu {
+    top: 74px;
+    right: calc((100vw - min(100vw, 1200px)) / 2 + 24px);
   }
 }

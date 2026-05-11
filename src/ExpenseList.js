@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import logo from './assets/logo.png';
-import HamburgerMenu from './HamburgerMenu';
+import AppHeader from './AppHeader';
 
 function ExpensesPage({
   expenses,
@@ -27,6 +26,9 @@ function ExpensesPage({
   authLoading,
   onSignInWithGoogle,
   onLogout,
+  userGroup,
+  onOpenFamilyGroup,
+  onOpenFamilyDashboard,
   income,
   totalIncome,
   onDeleteIncome,
@@ -60,7 +62,13 @@ function ExpensesPage({
   const filteredTotal = getFilteredTotal();
   const totalAmount = getAllTimeExpensesTotal ? getAllTimeExpensesTotal() : 0;
   
-  const sortedExpenses = [...filteredExpenses].sort((a, b) => b.id - a.id);
+  const sortedExpenses = [...filteredExpenses].sort((a, b) => {
+    const dateComparison = new Date(b.date) - new Date(a.date);
+    if (dateComparison !== 0) {
+      return dateComparison;
+    }
+    return String(b.id).localeCompare(String(a.id));
+  });
   const visibleExpenses = sortedExpenses.slice(0, visibleCount);
   const hasMore = visibleCount < sortedExpenses.length;
 
@@ -116,68 +124,17 @@ function ExpensesPage({
   return (
     <div className={`App ${darkMode ? 'dark-mode' : ''}`}>
       <div className="container">
-        <div className="header">
-          <div className="header-top">
-            <div className="header-top-right">
-              <button
-                className={`theme-toggle ${darkMode ? 'toggle-active' : ''}`}
-                onClick={() => setDarkMode(!darkMode)}
-                title="Toggle dark mode"
-                aria-label="Toggle dark mode"
-              >
-                <span className="toggle-switch"></span>
-              </button>
-
-              {!authLoading && (
-                <div className="auth-section">
-                  {user ? (
-                    <div className="user-profile-section">
-                      {user.photoURL ? (
-                        <img src={user.photoURL} alt={user.displayName} className="user-avatar-small" />
-                      ) : (
-                        <div className="user-avatar-fallback-small">👤</div>
-                      )}
-                      <span className="user-name-small">{user.displayName || user.email.split('@')[0]}</span>
-                      <button
-                        className="logout-btn"
-                        onClick={onLogout}
-                        title="Logout"
-                        aria-label="Logout"
-                      >
-                        Logout
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      className="google-login-btn"
-                      onClick={onSignInWithGoogle}
-                      title="Sign in with Google"
-                      aria-label="Sign in with Google"
-                    >
-                      Sign in with Google
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="header-bottom">
-            <div className="header-left">
-              <img src={logo} alt="Raashi Logo" className="logo-image" />
-              <h1 className="title">Expense Tracker</h1>
-            </div>
-
-            <div className="header-right">
-              <HamburgerMenu 
-                user={user} 
-                onLogout={onLogout} 
-                userGroup={null}
-                darkMode={darkMode} 
-              />
-            </div>
-          </div>
-        </div>
+        <AppHeader
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
+          user={user}
+          authLoading={authLoading}
+          onLogout={onLogout}
+          onSignIn={onSignInWithGoogle}
+          userGroup={userGroup}
+          onOpenFamilyGroup={onOpenFamilyGroup}
+          onOpenFamilyDashboard={onOpenFamilyDashboard}
+        />
 
         <div className="month-selector">
           <label htmlFor="month-select">Select Month:</label>

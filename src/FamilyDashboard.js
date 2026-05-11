@@ -36,6 +36,117 @@ function FamilyDashboard({
   // Filter to only shared expenses for family dashboard
   // expenses prop (familySharedExpenses) already contains only shared expenses
   const sharedExpenses = expenses || [];
+  const currentMonthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const currentMonthEnd = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59, 999);
+
+  const parseISODate = (dateString, endOfDay = false) => {
+    if (!dateString || typeof dateString !== 'string') {
+      return null;
+    }
+
+    const [year, month, day] = dateString.split('-').map(Number);
+    if (!year || !month || !day) {
+      return null;
+    }
+
+    return new Date(year, month - 1, day, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+  };
+
+  const formatDateToISO = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getExpensesForDateRange = (expenseList, startDate, endDate) => {
+    const rangeExpenses = [];
+    const seenRecurringKeys = new Set();
+
+    expenseList.forEach((expense) => {
+      const expenseStartDate = parseISODate(expense.date);
+      if (!expenseStartDate) return;
+
+      if (!expense.isRecurring) {
+        if (expenseStartDate >= startDate && expenseStartDate <= endDate) {
+          rangeExpenses.push(expense);
+        }
+        return;
+      }
+
+      const expenseEndDate = expense.endDate ? parseISODate(expense.endDate, true) : null;
+      if (expenseStartDate > endDate || (expenseEndDate && expenseEndDate < startDate)) {
+        return;
+      }
+
+      const frequency = expense.frequency || 'monthly';
+      let currentDate = new Date(expenseStartDate);
+
+      const addOccurrence = (occurrenceDate) => {
+        if (
+          occurrenceDate < startDate ||
+          occurrenceDate > endDate ||
+          occurrenceDate < expenseStartDate ||
+          (expenseEndDate && occurrenceDate > expenseEndDate)
+        ) {
+          return;
+        }
+
+        const dateStr = formatDateToISO(occurrenceDate);
+        if (expense.excludedDates && expense.excludedDates.includes(dateStr)) {
+          return;
+        }
+
+        const key = `${expense.id}-${dateStr}`;
+        if (seenRecurringKeys.has(key)) {
+          return;
+        }
+
+        seenRecurringKeys.add(key);
+        rangeExpenses.push({
+          ...expense,
+          id: key,
+          date: dateStr,
+          isGenerated: true
+        });
+      };
+
+      if (frequency === 'daily') {
+        while (currentDate <= endDate) {
+          addOccurrence(new Date(currentDate));
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+      } else if (frequency === 'weekly') {
+        while (currentDate <= endDate) {
+          addOccurrence(new Date(currentDate));
+          currentDate.setDate(currentDate.getDate() + 7);
+        }
+      } else if (frequency === 'yearly') {
+        while (currentDate <= endDate) {
+          addOccurrence(new Date(currentDate));
+          currentDate.setFullYear(currentDate.getFullYear() + 1);
+        }
+      } else {
+        const dayOfMonth = expenseStartDate.getDate();
+        currentDate = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+
+        while (currentDate <= endDate) {
+          const year = currentDate.getFullYear();
+          const month = currentDate.getMonth();
+          const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+          const dayToUse = Math.min(dayOfMonth, lastDayOfMonth);
+
+          addOccurrence(new Date(year, month, dayToUse));
+          currentDate.setMonth(currentDate.getMonth() + 1);
+        }
+      }
+    });
+
+    return rangeExpenses;
+  };
+
+  const currentMonthSharedExpenses = getExpensesForDateRange(sharedExpenses, currentMonthStart, currentMonthEnd);
+  const currentMonthPersonalExpenses = getExpensesForDateRange(personalExpenses || [], currentMonthStart, currentMonthEnd);
 
   // Calculate total expenses from shared and personal
   const totalSharedExpenses = sharedExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
@@ -62,33 +173,8 @@ function FamilyDashboard({
   
   // Calculate monthly family expenses
   const getMonthlyExpenses = () => {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    
-    let monthlyTotal = 0;
-    
-    // Add shared expenses for this month
-    sharedExpenses.forEach(exp => {
-      if (exp.date) {
-        const expDate = new Date(exp.date);
-        if (expDate.getMonth() === currentMonth && expDate.getFullYear() === currentYear) {
-          monthlyTotal += exp.amount || 0;
-        }
-      }
-    });
-    
-    // Add personal expenses for this month
-    (personalExpenses || []).forEach(exp => {
-      if (exp.date) {
-        const expDate = new Date(exp.date);
-        if (expDate.getMonth() === currentMonth && expDate.getFullYear() === currentYear) {
-          monthlyTotal += exp.amount || 0;
-        }
-      }
-    });
-    
-    return monthlyTotal;
+    return [...currentMonthSharedExpenses, ...currentMonthPersonalExpenses]
+      .reduce((sum, exp) => sum + (exp.amount || 0), 0);
   };
   
   const monthlyFamilyIncome = getMonthlyIncome();
@@ -142,7 +228,7 @@ function FamilyDashboard({
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
-    
+
     const contributions = {};
     members.forEach(member => {
       contributions[member.userId] = {
@@ -155,13 +241,10 @@ function FamilyDashboard({
       };
     });
 
-    // Add shared expenses for this month
-    sharedExpenses.forEach(exp => {
-      if (exp.date && contributions[exp.createdBy]) {
-        const expDate = new Date(exp.date);
-        if (expDate.getMonth() === currentMonth && expDate.getFullYear() === currentYear) {
-          contributions[exp.createdBy].spent += exp.amount || 0;
-        }
+    // Add shared expenses for this month, including generated recurring occurrences
+    currentMonthSharedExpenses.forEach(exp => {
+      if (contributions[exp.createdBy]) {
+        contributions[exp.createdBy].spent += exp.amount || 0;
       }
     });
 
@@ -221,28 +304,23 @@ function FamilyDashboard({
   // Get category breakdown
   const getCategoryBreakdown = (monthFilter = 'current') => {
     const categories = {};
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
 
-    sharedExpenses.forEach(exp => {
+    const expensesForBreakdown = monthFilter === 'current' ? currentMonthSharedExpenses : sharedExpenses;
+
+    expensesForBreakdown.forEach(exp => {
       const cat = exp.category || 'Other';
       let includeExpense = false;
 
       if (monthFilter === 'current') {
-        // Current month only
-        if (exp.date) {
-          const expDate = new Date(exp.date);
-          includeExpense = expDate.getMonth() === currentMonth && expDate.getFullYear() === currentYear;
-        }
+        includeExpense = true;
       } else if (monthFilter === 'all-time') {
         // All time
         includeExpense = true;
       } else {
         // Specific month across all years (for all-time view by month)
         if (exp.date) {
-          const expDate = new Date(exp.date);
-          includeExpense = expDate.getMonth() === parseInt(monthFilter);
+          const expDate = parseISODate(exp.date);
+          includeExpense = expDate && expDate.getMonth() === parseInt(monthFilter);
         }
       }
 

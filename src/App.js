@@ -2189,6 +2189,9 @@ function App() {
               authLoading={authLoading}
               onSignInWithGoogle={handleSignInWithGoogle}
               onLogout={handleLogout}
+              userGroup={userGroup}
+              onOpenFamilyGroup={() => setShowGroupManager(true)}
+              onOpenFamilyDashboard={userGroup ? () => setViewingFamilyDashboard(true) : null}
               income={income}
               totalIncome={totalIncome}
               onDeleteIncome={handleDeleteIncome}
@@ -2205,8 +2208,13 @@ function App() {
             <InvestmentsModule
               user={user}
               darkMode={darkMode}
+              setDarkMode={setDarkMode}
               showToast={showToast}
               onLogout={handleLogout}
+              onSignIn={handleSignInWithGoogle}
+              userGroup={userGroup}
+              onOpenFamilyGroup={() => setShowGroupManager(true)}
+              onOpenFamilyDashboard={userGroup ? () => setViewingFamilyDashboard(true) : null}
             />
           }
         />

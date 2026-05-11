@@ -16,7 +16,8 @@
   --error-text: #c00;
 }
 
-.App.dark-mode {
+.App.dark-mode,
+.investments-module.dark-mode {
   --bg-primary: #1a1a1a;
   --bg-secondary: #2d2d2d;
   --bg-tertiary: #3a3a3a;
@@ -370,6 +371,33 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   transition: box-shadow 0.3s ease;
   border-bottom: 1px solid var(--border-light);
+}
+
+.app-header {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 72px;
+  padding: 12px 24px;
+  gap: 16px;
+}
+
+.app-header .header-left,
+.app-header .header-right {
+  min-width: 0;
+}
+
+.app-header .header-left {
+  flex: 1 1 auto;
+}
+
+.app-header .header-right {
+  gap: 10px;
+}
+
+.app-header .logo-image {
+  height: 48px;
+  max-width: min(220px, 52vw);
 }
 
 @media (max-width: 480px) {
@@ -1380,13 +1408,15 @@
   font-weight: 500;
 }
 
-.App.dark-mode .header {
+.App.dark-mode .header,
+.dark-mode .app-header {
   background: var(--bg-secondary);
   border-bottom-color: rgba(255, 255, 255, 0.1);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-.App.dark-mode .header:focus-within {
+.App.dark-mode .header:focus-within,
+.dark-mode .app-header:focus-within {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
@@ -3605,6 +3635,17 @@
 
 /* Responsive Styles */
 @media (max-width: 768px) {
+  .app-header {
+    min-height: 64px;
+    padding: 10px 16px;
+    gap: 12px;
+  }
+
+  .app-header .logo-image {
+    height: 42px;
+    max-width: 54vw;
+  }
+
   .header-top {
     padding: 8px 16px;
   }
@@ -3703,6 +3744,17 @@
 }
 
 @media (max-width: 480px) {
+  .app-header {
+    min-height: 58px;
+    padding: 9px 12px;
+    gap: 8px;
+  }
+
+  .app-header .logo-image {
+    height: 36px;
+    max-width: 50vw;
+  }
+
   .header-top {
     padding: 8px 12px;
   }

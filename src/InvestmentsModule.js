@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { sipsAPI, sipTopUpsAPI, insurancePoliciesAPI, vehicleInsurancePoliciesAPI, vehiclePollutionRecordsAPI } from './firebase';
 import SIPList from './InvestmentComponents/SIPList';
 import SIPForm from './InvestmentComponents/SIPForm';
@@ -10,11 +9,20 @@ import VehicleInsuranceList from './InvestmentComponents/VehicleInsuranceList';
 import VehicleInsuranceForm from './InvestmentComponents/VehicleInsuranceForm';
 import PollutionList from './InvestmentComponents/PollutionList';
 import PollutionForm from './InvestmentComponents/PollutionForm';
-import HamburgerMenu from './HamburgerMenu';
+import AppHeader from './AppHeader';
 import './InvestmentsModule.css';
 
-function InvestmentsModule({ user, darkMode, showToast, onLogout }) {
-  const navigate = useNavigate();
+function InvestmentsModule({
+  user,
+  darkMode,
+  setDarkMode,
+  showToast,
+  onLogout,
+  onSignIn,
+  userGroup,
+  onOpenFamilyGroup,
+  onOpenFamilyDashboard
+}) {
   const [activeTab, setActiveTab] = useState('sips');
   
   // SIPs state
@@ -293,6 +301,16 @@ function InvestmentsModule({ user, darkMode, showToast, onLogout }) {
   if (!user) {
     return (
       <div className={`investments-module ${darkMode ? 'dark-mode' : ''}`}>
+        <AppHeader
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
+          user={user}
+          onLogout={onLogout}
+          onSignIn={onSignIn}
+          userGroup={userGroup}
+          onOpenFamilyGroup={onOpenFamilyGroup}
+          onOpenFamilyDashboard={onOpenFamilyDashboard}
+        />
         <div className="investments-container">
           <p className="login-message">Please log in to access investments and policies.</p>
         </div>
@@ -302,27 +320,16 @@ function InvestmentsModule({ user, darkMode, showToast, onLogout }) {
 
   return (
     <div className={`investments-module ${darkMode ? 'dark-mode' : ''}`}>
-      {/* Header with Navigation */}
-      <div className="investments-header">
-        <div className="investments-header-left">
-          <button
-            className="back-button"
-            onClick={() => navigate(-1)}
-            title="Go back"
-          >
-            ← Back
-          </button>
-          <h1 className="investments-header-title">📊 Investments & Policies</h1>
-        </div>
-        <div className="investments-header-right">
-          <HamburgerMenu
-            user={user}
-            onLogout={onLogout}
-            userGroup={null}
-            darkMode={darkMode}
-          />
-        </div>
-      </div>
+      <AppHeader
+        darkMode={darkMode}
+        setDarkMode={setDarkMode}
+        user={user}
+        onLogout={onLogout}
+        onSignIn={onSignIn}
+        userGroup={userGroup}
+        onOpenFamilyGroup={onOpenFamilyGroup}
+        onOpenFamilyDashboard={onOpenFamilyDashboard}
+      />
 
       <div className="investments-container">
         {/* Tabs Navigation */}
