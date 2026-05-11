@@ -1,4 +1,8 @@
+import { useState } from 'react';
+
 function InsuranceList({ policies, onEdit, onDelete, loading, darkMode }) {
+  const [selectedPolicy, setSelectedPolicy] = useState(null);
+
   const isExpired = (renewalDate, maturityDate) => {
     const today = new Date();
     const checkDate = renewalDate || maturityDate;
@@ -38,7 +42,11 @@ function InsuranceList({ policies, onEdit, onDelete, loading, darkMode }) {
       {activePolicies.length > 0 && (
         <>
           {activePolicies.map((policy) => (
-            <div key={policy.id} className="insurance-list-row">
+            <div
+              key={policy.id}
+              className="insurance-list-row"
+              onClick={() => setSelectedPolicy(policy)}
+            >
               <div className="row-main">
                 <div className="row-col policy-name">
                   <strong>{policy.policyName}</strong>
@@ -65,17 +73,23 @@ function InsuranceList({ policies, onEdit, onDelete, loading, darkMode }) {
                 <div className="row-col policy-actions">
                   <button
                     className="icon-btn edit-btn"
-                    onClick={() => onEdit(policy)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(policy);
+                    }}
                     title="Edit policy"
                   >
-                    ✏️
+                    Edit
                   </button>
                   <button
                     className="icon-btn delete-btn"
-                    onClick={() => onDelete(policy.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(policy.id);
+                    }}
                     title="Delete policy"
                   >
-                    🗑️
+                    Delete
                   </button>
                 </div>
               </div>
@@ -94,7 +108,11 @@ function InsuranceList({ policies, onEdit, onDelete, loading, darkMode }) {
       {expiredPolicies.length > 0 && (
         <>
           {expiredPolicies.map((policy) => (
-            <div key={policy.id} className="insurance-list-row expired">
+            <div
+              key={policy.id}
+              className="insurance-list-row expired"
+              onClick={() => setSelectedPolicy(policy)}
+            >
               <div className="row-main">
                 <div className="row-col policy-name">
                   <strong>{policy.policyName}</strong>
@@ -117,17 +135,23 @@ function InsuranceList({ policies, onEdit, onDelete, loading, darkMode }) {
                 <div className="row-col policy-actions">
                   <button
                     className="icon-btn edit-btn"
-                    onClick={() => onEdit(policy)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(policy);
+                    }}
                     title="Edit policy"
                   >
-                    ✏️
+                    Edit
                   </button>
                   <button
                     className="icon-btn delete-btn"
-                    onClick={() => onDelete(policy.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(policy.id);
+                    }}
                     title="Delete policy"
                   >
-                    🗑️
+                    Delete
                   </button>
                 </div>
               </div>
@@ -146,6 +170,95 @@ function InsuranceList({ policies, onEdit, onDelete, loading, darkMode }) {
         <div className="empty-state">
           <p>🛡️ No insurance policies yet. Add your first policy to get started!</p>
         </div>
+      )}
+
+      {/* Side Panel */}
+      {selectedPolicy && (
+        <>
+          <div
+            className="panel-overlay"
+            onClick={() => setSelectedPolicy(null)}
+          />
+          <div className="insurance-details-panel">
+            <div className="panel-header">
+              <h2>{selectedPolicy.policyName}</h2>
+              <button
+                className="close-btn"
+                onClick={() => setSelectedPolicy(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="panel-content">
+              <div className="detail-row">
+                <span className="detail-label">Vendor:</span>
+                <span className="detail-value">{selectedPolicy.vendor}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Amount:</span>
+                <span className="detail-value">
+                  ₹{selectedPolicy.amount.toFixed(2)}
+                </span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Type:</span>
+                <span className="detail-value">{selectedPolicy.policyType}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Policy Number:</span>
+                <span className="detail-value">
+                  {selectedPolicy.policyNumber || '-'}
+                </span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Start Date:</span>
+                <span className="detail-value">
+                  {selectedPolicy.startDate || '-'}
+                </span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Renewal Date:</span>
+                <span className="detail-value">
+                  {selectedPolicy.renewalDate || '-'}
+                </span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Maturity Date:</span>
+                <span className="detail-value">
+                  {selectedPolicy.maturityDate || '-'}
+                </span>
+              </div>
+              {selectedPolicy.notes && (
+                <div className="detail-row">
+                  <span className="detail-label">Notes:</span>
+                  <span className="detail-value">{selectedPolicy.notes}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="panel-actions">
+              <button
+                className="action-btn edit-btn"
+                onClick={() => {
+                  onEdit(selectedPolicy);
+                  setSelectedPolicy(null);
+                }}
+              >
+                Edit Policy
+              </button>
+              <button
+                className="action-btn delete-btn"
+                onClick={() => {
+                  onDelete(selectedPolicy.id);
+                  setSelectedPolicy(null);
+                }}
+              >
+                Delete Policy
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

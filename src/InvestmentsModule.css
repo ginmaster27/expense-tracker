@@ -510,31 +510,43 @@
 }
 
 .icon-btn {
-  padding: 6px 10px;
+  padding: 6px 12px;
   border: none;
   background-color: transparent;
-  font-size: 16px;
+  font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 6px;
   transition: all 0.3s ease;
-  opacity: 0.7;
-}
-
-.icon-btn:hover {
-  opacity: 1;
-  background-color: rgba(0, 0, 0, 0.05);
-}
-
-.investments-module.dark-mode .icon-btn:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.edit-btn:hover {
   color: #2196F3;
 }
 
-.delete-btn:hover {
+.icon-btn:hover {
+  background-color: rgba(33, 150, 243, 0.1);
+}
+
+.icon-btn.delete-btn {
   color: #f44336;
+}
+
+.icon-btn.delete-btn:hover {
+  background-color: rgba(244, 67, 54, 0.1);
+}
+
+.investments-module.dark-mode .icon-btn {
+  color: #64b5f6;
+}
+
+.investments-module.dark-mode .icon-btn:hover {
+  background-color: rgba(100, 181, 246, 0.1);
+}
+
+.investments-module.dark-mode .icon-btn.delete-btn {
+  color: #ef5350;
+}
+
+.investments-module.dark-mode .icon-btn.delete-btn:hover {
+  background-color: rgba(239, 83, 80, 0.1);
 }
 
 /* Card Summary */
@@ -1621,6 +1633,7 @@
   border-bottom: 1px solid #e0e0e0;
   background-color: white;
   transition: background-color 0.2s ease;
+  cursor: pointer;
 }
 
 .investments-module.dark-mode .insurance-list-row {
@@ -1709,47 +1722,94 @@
 }
 
 @media (max-width: 768px) {
-  .insurance-list-header,
-  .insurance-list-row .row-main {
-    grid-template-columns: 2fr 1.5fr 1.5fr 0.8fr;
-  }
-
-  .header-col.policy-vendor,
-  .row-col.policy-vendor,
-  .header-col.policy-type,
-  .row-col.policy-type,
-  .header-col.policy-date,
-  .row-col.policy-date {
-    display: none;
-  }
-}
-
-@media (max-width: 480px) {
   .insurance-list-header {
-    grid-template-columns: 2fr 1.5fr 0.8fr;
+    grid-template-columns: 1.5fr 1.5fr 1.5fr 0.8fr;
     font-size: 11px;
   }
 
   .insurance-list-row .row-main {
-    grid-template-columns: 2fr 1.5fr 0.8fr;
-    padding: 10px;
+    grid-template-columns: 1.5fr 1.5fr 1.5fr 0.8fr;
+    padding: 12px;
   }
 
-  .header-col.policy-amount,
-  .row-col.policy-amount,
   .header-col.policy-vendor,
   .row-col.policy-vendor,
   .header-col.policy-type,
   .row-col.policy-type,
   .header-col.policy-status,
-  .row-col.policy-status,
-  .header-col.policy-date,
-  .row-col.policy-date {
+  .row-col.policy-status {
     display: none;
   }
 
+  .row-col.policy-name {
+    grid-column: 1;
+  }
+
+  .row-col.policy-amount {
+    grid-column: 2;
+  }
+
+  .row-col.policy-date {
+    grid-column: 3;
+  }
+
+  .row-col.policy-actions {
+    grid-column: 4;
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .insurance-list-header {
+    grid-template-columns: 1.5fr 1.5fr 1.5fr 0.8fr;
+    font-size: 10px;
+    padding: 10px;
+  }
+
+  .insurance-list-row .row-main {
+    grid-template-columns: 1.5fr 1.5fr 1.5fr 0.8fr;
+    padding: 12px 10px;
+    gap: 8px;
+  }
+
+  .header-col.policy-vendor,
+  .row-col.policy-vendor,
+  .header-col.policy-type,
+  .row-col.policy-type,
+  .header-col.policy-status,
+  .row-col.policy-status {
+    display: none;
+  }
+
+  .row-col.policy-name {
+    grid-column: 1;
+  }
+
+  .row-col.policy-amount {
+    grid-column: 2;
+    font-size: 0.9rem;
+  }
+
+  .row-col.policy-date {
+    grid-column: 3;
+    font-size: 0.9rem;
+  }
+
+  .row-col.policy-actions {
+    grid-column: 4;
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+
+  .header-col.policy-date::before {
+    content: "Renewal";
+  }
+
   .row-details {
-    padding: 6px 10px;
+    padding: 8px 10px;
     font-size: 11px;
   }
 }
@@ -1781,6 +1841,7 @@
   border-bottom: 1px solid #e0e0e0;
   background-color: white;
   transition: background-color 0.2s ease;
+  cursor: pointer;
 }
 
 .investments-module.dark-mode .vehicle-list-row {
@@ -1830,48 +1891,161 @@
 }
 
 @media (max-width: 768px) {
-  .vehicle-list-header,
+  .vehicle-list-header {
+    grid-template-columns: 1.5fr 1.5fr 1.5fr 0.8fr;
+    font-size: 11px;
+  }
+
   .vehicle-list-row .row-main {
     grid-template-columns: 1.5fr 1.5fr 1.5fr 0.8fr;
+    padding: 12px;
   }
 
   .header-col.vehicle-vendor,
   .row-col.vehicle-vendor,
+  .header-col.vehicle-type,
+  .row-col.vehicle-type,
   .header-col.vehicle-status,
-  .row-col.vehicle-status,
-  .header-col.vehicle-expiry,
-  .row-col.vehicle-expiry {
+  .row-col.vehicle-status {
     display: none;
+  }
+
+  .row-col.vehicle-number {
+    grid-column: 1;
+  }
+
+  .row-col.vehicle-amount {
+    grid-column: 2;
+  }
+
+  .row-col.vehicle-expiry {
+    grid-column: 3;
+  }
+
+  .row-col.vehicle-actions {
+    grid-column: 4;
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
   }
 }
 
 @media (max-width: 480px) {
   .vehicle-list-header {
-    grid-template-columns: 1.5fr 0.8fr;
-    font-size: 11px;
+    grid-template-columns: 1.5fr 1.5fr 1.5fr 0.8fr;
+    font-size: 10px;
+    padding: 10px;
   }
 
   .vehicle-list-row .row-main {
-    grid-template-columns: 1.5fr 0.8fr;
-    padding: 10px;
+    grid-template-columns: 1.5fr 1.5fr 1.5fr 0.8fr;
+    padding: 12px 10px;
+    gap: 8px;
   }
 
   .header-col.vehicle-vendor,
   .row-col.vehicle-vendor,
-  .header-col.vehicle-amount,
-  .row-col.vehicle-amount,
   .header-col.vehicle-type,
   .row-col.vehicle-type,
   .header-col.vehicle-status,
-  .row-col.vehicle-status,
-  .header-col.vehicle-expiry,
-  .row-col.vehicle-expiry {
+  .row-col.vehicle-status {
     display: none;
   }
 
+  .row-col.vehicle-number {
+    grid-column: 1;
+  }
+
+  .row-col.vehicle-amount {
+    grid-column: 2;
+    font-size: 0.9rem;
+  }
+
+  .row-col.vehicle-expiry {
+    grid-column: 3;
+    font-size: 0.9rem;
+  }
+
+  .row-col.vehicle-actions {
+    grid-column: 4;
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+
+  .header-col.vehicle-expiry::before {
+    content: "Expiry";
+  }
+
   .row-details {
-    padding: 6px 10px;
+    padding: 8px 10px;
     font-size: 11px;
+  }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   INSURANCE & VEHICLE INSURANCE DETAIL PANELS
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+/* Generic Panel Overlay */
+.panel-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  animation: fadeIn 0.3s ease;
+}
+
+/* Insurance Details Panel */
+.insurance-details-panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 400px;
+  background-color: white;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  animation: slideInRight 0.3s ease;
+  overflow-y: auto;
+}
+
+.investments-module.dark-mode .insurance-details-panel {
+  background-color: #1f1f1f;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Vehicle Insurance Details Panel */
+.vehicle-details-panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 400px;
+  background-color: white;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  animation: slideInRight 0.3s ease;
+  overflow-y: auto;
+}
+
+.investments-module.dark-mode .vehicle-details-panel {
+  background-color: #1f1f1f;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Responsive adjustments for detail panels */
+@media (max-width: 768px) {
+  .insurance-details-panel,
+  .vehicle-details-panel {
+    width: 100%;
   }
 }
 

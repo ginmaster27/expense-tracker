@@ -1,4 +1,8 @@
+import { useState } from 'react';
+
 function VehicleInsuranceList({ vehicleInsurances, onEdit, onDelete, loading, darkMode }) {
+  const [selectedVehicle, setSelectedVehicle] = useState(null);
+
   const isExpired = (expiryDate) => {
     const today = new Date();
     return new Date(expiryDate) < today;
@@ -36,7 +40,11 @@ function VehicleInsuranceList({ vehicleInsurances, onEdit, onDelete, loading, da
       {activeInsurances.length > 0 && (
         <>
           {activeInsurances.map((vehicle) => (
-            <div key={vehicle.id} className="vehicle-list-row">
+            <div
+              key={vehicle.id}
+              className="vehicle-list-row"
+              onClick={() => setSelectedVehicle(vehicle)}
+            >
               <div className="row-main">
                 <div className="row-col vehicle-number">
                   <strong>{vehicle.vehicleNumber}</strong>
@@ -63,17 +71,23 @@ function VehicleInsuranceList({ vehicleInsurances, onEdit, onDelete, loading, da
                 <div className="row-col vehicle-actions">
                   <button
                     className="icon-btn edit-btn"
-                    onClick={() => onEdit(vehicle)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(vehicle);
+                    }}
                     title="Edit vehicle insurance"
                   >
-                    ✏️
+                    Edit
                   </button>
                   <button
                     className="icon-btn delete-btn"
-                    onClick={() => onDelete(vehicle.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(vehicle.id);
+                    }}
                     title="Delete vehicle insurance"
                   >
-                    🗑️
+                    Delete
                   </button>
                 </div>
               </div>
@@ -92,7 +106,11 @@ function VehicleInsuranceList({ vehicleInsurances, onEdit, onDelete, loading, da
       {expiredInsurances.length > 0 && (
         <>
           {expiredInsurances.map((vehicle) => (
-            <div key={vehicle.id} className="vehicle-list-row expired">
+            <div
+              key={vehicle.id}
+              className="vehicle-list-row expired"
+              onClick={() => setSelectedVehicle(vehicle)}
+            >
               <div className="row-main">
                 <div className="row-col vehicle-number">
                   <strong>{vehicle.vehicleNumber}</strong>
@@ -115,17 +133,23 @@ function VehicleInsuranceList({ vehicleInsurances, onEdit, onDelete, loading, da
                 <div className="row-col vehicle-actions">
                   <button
                     className="icon-btn edit-btn"
-                    onClick={() => onEdit(vehicle)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(vehicle);
+                    }}
                     title="Edit vehicle insurance"
                   >
-                    ✏️
+                    Edit
                   </button>
                   <button
                     className="icon-btn delete-btn"
-                    onClick={() => onDelete(vehicle.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(vehicle.id);
+                    }}
                     title="Delete vehicle insurance"
                   >
-                    🗑️
+                    Delete
                   </button>
                 </div>
               </div>
@@ -144,6 +168,95 @@ function VehicleInsuranceList({ vehicleInsurances, onEdit, onDelete, loading, da
         <div className="empty-state">
           <p>🚗 No vehicle insurance policies yet. Add your first policy to get started!</p>
         </div>
+      )}
+
+      {/* Side Panel */}
+      {selectedVehicle && (
+        <>
+          <div
+            className="panel-overlay"
+            onClick={() => setSelectedVehicle(null)}
+          />
+          <div className="vehicle-details-panel">
+            <div className="panel-header">
+              <h2>{selectedVehicle.vehicleNumber}</h2>
+              <button
+                className="close-btn"
+                onClick={() => setSelectedVehicle(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="panel-content">
+              <div className="detail-row">
+                <span className="detail-label">Vendor:</span>
+                <span className="detail-value">{selectedVehicle.vendor}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Amount:</span>
+                <span className="detail-value">
+                  ₹{selectedVehicle.amount.toFixed(2)}
+                </span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Type:</span>
+                <span className="detail-value">{selectedVehicle.policyType}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Policy Number:</span>
+                <span className="detail-value">
+                  {selectedVehicle.policyNumber || '-'}
+                </span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Start Date:</span>
+                <span className="detail-value">
+                  {selectedVehicle.startDate || '-'}
+                </span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Expiry Date:</span>
+                <span className="detail-value">
+                  {selectedVehicle.expiryDate || '-'}
+                </span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Renewal Date:</span>
+                <span className="detail-value">
+                  {selectedVehicle.renewalDate || '-'}
+                </span>
+              </div>
+              {selectedVehicle.notes && (
+                <div className="detail-row">
+                  <span className="detail-label">Notes:</span>
+                  <span className="detail-value">{selectedVehicle.notes}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="panel-actions">
+              <button
+                className="action-btn edit-btn"
+                onClick={() => {
+                  onEdit(selectedVehicle);
+                  setSelectedVehicle(null);
+                }}
+              >
+                Edit Insurance
+              </button>
+              <button
+                className="action-btn delete-btn"
+                onClick={() => {
+                  onDelete(selectedVehicle.id);
+                  setSelectedVehicle(null);
+                }}
+              >
+                Delete Insurance
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
