@@ -1,4 +1,8 @@
+import { useState } from 'react';
+
 function PollutionList({ records, onEdit, onDelete, loading, darkMode }) {
+  const [selectedRecord, setSelectedRecord] = useState(null);
+
   const isExpired = (expiryDate) => {
     const today = new Date();
     return new Date(expiryDate) < today;
@@ -35,7 +39,11 @@ function PollutionList({ records, onEdit, onDelete, loading, darkMode }) {
       {activeRecords.length > 0 && (
         <>
           {activeRecords.map((record) => (
-            <div key={record.id} className="pollution-list-row">
+            <div
+              key={record.id}
+              className="pollution-list-row"
+              onClick={() => setSelectedRecord(record)}
+            >
               <div className="row-main">
                 <div className="row-col pollution-vehicle">
                   <strong>{record.vehicleNumber}</strong>
@@ -62,17 +70,23 @@ function PollutionList({ records, onEdit, onDelete, loading, darkMode }) {
                 <div className="row-col pollution-actions">
                   <button
                     className="icon-btn edit-btn"
-                    onClick={() => onEdit(record)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(record);
+                    }}
                     title="Edit pollution certificate"
                   >
-                    ✏️
+                    Edit
                   </button>
                   <button
                     className="icon-btn delete-btn"
-                    onClick={() => onDelete(record.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(record.id);
+                    }}
                     title="Delete pollution certificate"
                   >
-                    🗑️
+                    Delete
                   </button>
                 </div>
               </div>
@@ -91,7 +105,11 @@ function PollutionList({ records, onEdit, onDelete, loading, darkMode }) {
       {expiredRecords.length > 0 && (
         <>
           {expiredRecords.map((record) => (
-            <div key={record.id} className="pollution-list-row expired">
+            <div
+              key={record.id}
+              className="pollution-list-row expired"
+              onClick={() => setSelectedRecord(record)}
+            >
               <div className="row-main">
                 <div className="row-col pollution-vehicle">
                   <strong>{record.vehicleNumber}</strong>
@@ -114,17 +132,23 @@ function PollutionList({ records, onEdit, onDelete, loading, darkMode }) {
                 <div className="row-col pollution-actions">
                   <button
                     className="icon-btn edit-btn"
-                    onClick={() => onEdit(record)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(record);
+                    }}
                     title="Edit pollution certificate"
                   >
-                    ✏️
+                    Edit
                   </button>
                   <button
                     className="icon-btn delete-btn"
-                    onClick={() => onDelete(record.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(record.id);
+                    }}
                     title="Delete pollution certificate"
                   >
-                    🗑️
+                    Delete
                   </button>
                 </div>
               </div>
@@ -143,6 +167,85 @@ function PollutionList({ records, onEdit, onDelete, loading, darkMode }) {
         <div className="empty-state">
           <p>🌱 No pollution certificates yet. Add your first certificate to get started!</p>
         </div>
+      )}
+
+      {/* Side Panel */}
+      {selectedRecord && (
+        <>
+          <div
+            className="panel-overlay"
+            onClick={() => setSelectedRecord(null)}
+          />
+          <div className="pollution-details-panel">
+            <div className="panel-header">
+              <h2>{selectedRecord.vehicleNumber}</h2>
+              <button
+                className="close-btn"
+                onClick={() => setSelectedRecord(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="panel-content">
+              <div className="detail-row">
+                <span className="detail-label">Vehicle Number:</span>
+                <span className="detail-value">{selectedRecord.vehicleNumber}</span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Amount:</span>
+                <span className="detail-value">
+                  ₹{selectedRecord.amount.toFixed(2)}
+                </span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Start Date:</span>
+                <span className="detail-value">
+                  {selectedRecord.startDate || '-'}
+                </span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Expiry Date:</span>
+                <span className="detail-value">
+                  {selectedRecord.expiryDate || '-'}
+                </span>
+              </div>
+              <div className="detail-row">
+                <span className="detail-label">Who Paid:</span>
+                <span className="detail-value">
+                  {selectedRecord.whoPaid || '-'}
+                </span>
+              </div>
+              {selectedRecord.notes && (
+                <div className="detail-row">
+                  <span className="detail-label">Notes:</span>
+                  <span className="detail-value">{selectedRecord.notes}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="panel-actions">
+              <button
+                className="action-btn edit-btn"
+                onClick={() => {
+                  onEdit(selectedRecord);
+                  setSelectedRecord(null);
+                }}
+              >
+                Edit Certificate
+              </button>
+              <button
+                className="action-btn delete-btn"
+                onClick={() => {
+                  onDelete(selectedRecord.id);
+                  setSelectedRecord(null);
+                }}
+              >
+                Delete Certificate
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

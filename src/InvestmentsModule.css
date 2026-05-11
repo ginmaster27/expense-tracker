@@ -984,6 +984,7 @@
 .sip-card-actions {
   display: flex;
   gap: 8px;
+  flex-direction: column;
 }
 
 .sip-card-actions .edit-btn {
@@ -993,12 +994,39 @@
   padding: 8px 12px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 1rem;
-  transition: background-color 0.3s ease;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background-color 0.3s ease, transform 0.2s ease;
 }
 
 .sip-card-actions .edit-btn:hover {
   background-color: #1976D2;
+  transform: translateY(-2px);
+}
+
+.sip-card-actions .delete-btn {
+  background-color: #f44336;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.sip-card-actions .delete-btn:hover {
+  background-color: #d32f2f;
+  transform: translateY(-2px);
+}
+
+.investments-module.dark-mode .sip-card-actions .edit-btn {
+  background-color: #2196F3;
+}
+
+.investments-module.dark-mode .sip-card-actions .delete-btn {
+  background-color: #f44336;
 }
 
 /* Side Panel Styles */
@@ -2041,6 +2069,27 @@
   box-shadow: -2px 0 12px rgba(0, 0, 0, 0.3);
 }
 
+/* Pollution Details Panel */
+.pollution-details-panel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 400px;
+  background-color: white;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  animation: slideInRight 0.3s ease;
+  overflow-y: auto;
+}
+
+.investments-module.dark-mode .pollution-details-panel {
+  background-color: #1f1f1f;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.3);
+}
+
 /* Responsive adjustments for detail panels */
 @media (max-width: 768px) {
   .insurance-details-panel,
@@ -2169,5 +2218,220 @@
   .row-details {
     padding: 6px 10px;
     font-size: 11px;
+  }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   MOBILE CARD LAYOUT FOR ALL LISTS (480px and below)
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 480px) {
+  /* Hide table headers on mobile */
+  .insurance-list-header,
+  .vehicle-list-header,
+  .pollution-list-header {
+    display: none;
+  }
+
+  /* Convert table rows to card layout */
+  .insurance-list-row,
+  .vehicle-list-row,
+  .pollution-list-row {
+    display: flex;
+    flex-direction: column;
+    background-color: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+
+  .investments-module.dark-mode .insurance-list-row,
+  .investments-module.dark-mode .vehicle-list-row,
+  .investments-module.dark-mode .pollution-list-row {
+    background-color: #1f1f1f;
+    border-color: #333;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .insurance-list-row:hover,
+  .vehicle-list-row:hover,
+  .pollution-list-row:hover {
+    background-color: white;
+  }
+
+  .investments-module.dark-mode .insurance-list-row:hover,
+  .investments-module.dark-mode .vehicle-list-row:hover,
+  .investments-module.dark-mode .pollution-list-row:hover {
+    background-color: #252525;
+  }
+
+  /* Card container with two columns - details and actions */
+  .insurance-list-row .row-main,
+  .vehicle-list-row .row-main,
+  .pollution-list-row .row-main {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  /* Left column - details */
+  .insurance-list-row .row-col:not(.policy-actions),
+  .vehicle-list-row .row-col:not(.vehicle-actions),
+  .pollution-list-row .row-col:not(.pollution-actions) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border: none;
+    padding: 0;
+  }
+
+  /* Hide secondary columns, show only key details */
+  .insurance-list-row .row-col.policy-vendor,
+  .insurance-list-row .row-col.policy-type,
+  .insurance-list-row .row-col.policy-status,
+  .vehicle-list-row .row-col.vehicle-vendor,
+  .vehicle-list-row .row-col.vehicle-type,
+  .vehicle-list-row .row-col.vehicle-status,
+  .pollution-list-row .row-col.pollution-amount,
+  .pollution-list-row .row-col.pollution-start,
+  .pollution-list-row .row-col.pollution-status,
+  .pollution-list-row .row-col.pollution-paid {
+    display: none;
+  }
+
+  /* Policy Name / Vehicle Number - Main title */
+  .insurance-list-row .row-col.policy-name,
+  .vehicle-list-row .row-col.vehicle-number,
+  .pollution-list-row .row-col.pollution-vehicle {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #2196F3;
+    margin-bottom: 8px;
+  }
+
+  .investments-module.dark-mode .insurance-list-row .row-col.policy-name,
+  .investments-module.dark-mode .vehicle-list-row .row-col.vehicle-number,
+  .investments-module.dark-mode .pollution-list-row .row-col.pollution-vehicle {
+    color: #64b5f6;
+  }
+
+  /* Amount | Date details */
+  .insurance-list-row .row-col.policy-amount,
+  .vehicle-list-row .row-col.vehicle-amount,
+  .pollution-list-row .row-col.pollution-expiry {
+    display: flex !important;
+    gap: 8px;
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 4px;
+  }
+
+  .investments-module.dark-mode .insurance-list-row .row-col.policy-amount,
+  .investments-module.dark-mode .vehicle-list-row .row-col.vehicle-amount,
+  .investments-module.dark-mode .pollution-list-row .row-col.pollution-expiry {
+    color: #ccc;
+  }
+
+  .insurance-list-row .row-col.policy-amount::before {
+    content: '💰 ';
+  }
+
+  .vehicle-list-row .row-col.vehicle-amount::before {
+    content: '💳 ';
+  }
+
+  .pollution-list-row .row-col.pollution-expiry::before {
+    content: '📅 ';
+  }
+
+  /* Date column content */
+  .insurance-list-row .row-col.policy-date,
+  .vehicle-list-row .row-col.vehicle-expiry {
+    display: flex !important;
+    font-size: 0.85rem;
+    color: #999;
+  }
+
+  .insurance-list-row .row-col.policy-date::before {
+    content: '🔄 ';
+  }
+
+  .vehicle-list-row .row-col.vehicle-expiry::before {
+    content: '⏰ ';
+  }
+
+  /* Right column - Action buttons */
+  .insurance-list-row .row-col.policy-actions,
+  .vehicle-list-row .row-col.vehicle-actions,
+  .pollution-list-row .row-col.pollution-actions {
+    display: flex !important;
+    flex-direction: column;
+    gap: 8px;
+    flex-shrink: 0;
+    padding: 0;
+    border: none;
+  }
+
+  /* Update icon buttons to look like action buttons */
+  .insurance-list-row .row-col.policy-actions .icon-btn,
+  .vehicle-list-row .row-col.vehicle-actions .icon-btn,
+  .pollution-list-row .row-col.pollution-actions .icon-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    background-color: transparent;
+    border-radius: 6px;
+    white-space: nowrap;
+    text-align: center;
+  }
+
+  .insurance-list-row .row-col.policy-actions .icon-btn.edit-btn,
+  .vehicle-list-row .row-col.vehicle-actions .icon-btn.edit-btn,
+  .pollution-list-row .row-col.pollution-actions .icon-btn.edit-btn {
+    background-color: #2196F3;
+    color: white;
+  }
+
+  .insurance-list-row .row-col.policy-actions .icon-btn.edit-btn:hover,
+  .vehicle-list-row .row-col.vehicle-actions .icon-btn.edit-btn:hover,
+  .pollution-list-row .row-col.pollution-actions .icon-btn.edit-btn:hover {
+    background-color: #1976D2;
+    transform: translateY(-2px);
+  }
+
+  .insurance-list-row .row-col.policy-actions .icon-btn.delete-btn,
+  .vehicle-list-row .row-col.vehicle-actions .icon-btn.delete-btn,
+  .pollution-list-row .row-col.pollution-actions .icon-btn.delete-btn {
+    background-color: #f44336;
+    color: white;
+  }
+
+  .insurance-list-row .row-col.policy-actions .icon-btn.delete-btn:hover,
+  .vehicle-list-row .row-col.vehicle-actions .icon-btn.delete-btn:hover,
+  .pollution-list-row .row-col.pollution-actions .icon-btn.delete-btn:hover {
+    background-color: #d32f2f;
+    transform: translateY(-2px);
+  }
+
+  .investments-module.dark-mode .insurance-list-row .row-col.policy-actions .icon-btn.edit-btn,
+  .investments-module.dark-mode .vehicle-list-row .row-col.vehicle-actions .icon-btn.edit-btn,
+  .investments-module.dark-mode .pollution-list-row .row-col.pollution-actions .icon-btn.edit-btn {
+    background-color: #2196F3;
+  }
+
+  .investments-module.dark-mode .insurance-list-row .row-col.policy-actions .icon-btn.delete-btn,
+  .investments-module.dark-mode .vehicle-list-row .row-col.vehicle-actions .icon-btn.delete-btn,
+  .investments-module.dark-mode .pollution-list-row .row-col.pollution-actions .icon-btn.delete-btn {
+    background-color: #f44336;
+  }
+
+  /* Hide row details on mobile */
+  .insurance-list-row .row-details,
+  .vehicle-list-row .row-details,
+  .pollution-list-row .row-details {
+    display: none;
   }
 }

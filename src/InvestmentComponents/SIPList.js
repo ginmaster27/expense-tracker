@@ -86,7 +86,7 @@ function SIPList({ sips, topUps, onEdit, onDelete, onAddTopUp, onDeleteTopUp, lo
                   </div>
                 </div>
 
-                {/* Edit Button */}
+                {/* Edit and Delete Buttons */}
                 <div className="sip-card-actions">
                   <button
                     className="icon-btn edit-btn"
@@ -96,7 +96,17 @@ function SIPList({ sips, topUps, onEdit, onDelete, onAddTopUp, onDeleteTopUp, lo
                     }}
                     title="Edit SIP"
                   >
-                    ✏️
+                    Edit
+                  </button>
+                  <button
+                    className="icon-btn delete-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(sip.id);
+                    }}
+                    title="Delete SIP"
+                  >
+                    Delete
                   </button>
                 </div>
               </div>
@@ -193,7 +203,7 @@ function SIPList({ sips, topUps, onEdit, onDelete, onAddTopUp, onDeleteTopUp, lo
                           }}
                           title="Delete top-up"
                         >
-                          🗑️
+                          Delete
                         </button>
                       </div>
                     ))}
@@ -210,7 +220,7 @@ function SIPList({ sips, topUps, onEdit, onDelete, onAddTopUp, onDeleteTopUp, lo
                     setSelectedSIP(null);
                   }}
                 >
-                  ✏️ Edit SIP
+                  Edit SIP
                 </button>
                 <button
                   className="action-btn topup-btn"
@@ -219,7 +229,7 @@ function SIPList({ sips, topUps, onEdit, onDelete, onAddTopUp, onDeleteTopUp, lo
                     setSelectedSIP(null);
                   }}
                 >
-                  ➕ Add Top-up
+                  Add Top-up
                 </button>
                 <button
                   className="action-btn delete-btn"
@@ -231,7 +241,7 @@ function SIPList({ sips, topUps, onEdit, onDelete, onAddTopUp, onDeleteTopUp, lo
                     }
                   }}
                 >
-                  🗑️ Delete SIP
+                  Delete SIP
                 </button>
               </div>
             </div>
