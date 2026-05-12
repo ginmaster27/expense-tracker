@@ -153,6 +153,70 @@ function Dashboard({
         return 'Current Month';
     }
   };
+
+  const getDateRangeForChartFilter = () => {
+    const now = new Date();
+    let startDate;
+    let endDate;
+
+    if (chartFilter === 'previous') {
+      const prevMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
+      const prevYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+      startDate = new Date(prevYear, prevMonth, 1);
+      endDate = new Date(prevYear, prevMonth + 1, 0, 23, 59, 59, 999);
+    } else if (chartFilter === '3months') {
+      startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    } else if (chartFilter === '6months') {
+      startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    } else {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    }
+
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
+
+    return { startDate, endDate };
+  };
+
+  const getIncomeTotalForChartFilter = () => {
+    const { startDate, endDate } = getDateRangeForChartFilter();
+
+    return income.reduce((sum, item) => {
+      if (!item.date) return sum;
+      const [year, month, day] = item.date.split('-').map(Number);
+      const itemDate = new Date(year, month - 1, day);
+      return itemDate >= startDate && itemDate <= endDate ? sum + (item.amount || 0) : sum;
+    }, 0);
+  };
+
+  const chartIncomeTotal = getIncomeTotalForChartFilter();
+
+  const getInvestmentTotalByFilter = () => {
+    return filteredExpenses.reduce((sum, expense) => {
+      const isInvestmentExpense =
+        expense.isSIPExpense ||
+        expense.source === 'sip' ||
+        (expense.category || '').toLowerCase() === 'investments';
+
+      return isInvestmentExpense ? sum + (expense.amount || 0) : sum;
+    }, 0);
+  };
+
+  const getInvestmentTargetInsight = () => {
+    const investmentTotal = getInvestmentTotalByFilter();
+    const targetAmount = chartIncomeTotal * 0.4;
+    const difference = investmentTotal - targetAmount;
+
+    return {
+      investmentTotal,
+      targetAmount,
+      difference,
+      isAhead: difference >= 0
+    };
+  };
   
   // Get today's date in YYYY-MM-DD format for max date on input
   const getMaxDate = () => {
@@ -685,7 +749,12 @@ function Dashboard({
               {categoryBreakdown.map((item) => (
                 <div key={item.category} className="breakdown-item">
                   <span className="breakdown-category">{item.category}</span>
-                  <span className="breakdown-amount">{formatCurrency(item.total)}</span>
+                  <span className="breakdown-value">
+                    <span className="breakdown-amount">{formatCurrency(item.total)}</span>
+                    <span className="breakdown-percentage">
+                      {chartIncomeTotal > 0 ? `${((item.total / chartIncomeTotal) * 100).toFixed(1)}% of income` : 'No income'}
+                    </span>
+                  </span>
                 </div>
               ))}
             </div>
@@ -743,6 +812,24 @@ function Dashboard({
                     <p className="insight-label">Daily Average</p>
                     <p className="insight-value">
                       You spend an average of <strong>{formatCurrency(getAverageDailySpendingByFilter())}</strong> per day
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {chartIncomeTotal > 0 && (
+                <div className="insight-card">
+                  <div className="insight-icon">💼</div>
+                  <div className="insight-content">
+                    <p className="insight-label">Investment Target</p>
+                    <p className="insight-value">
+                      You invested <strong>{formatCurrency(getInvestmentTargetInsight().investmentTotal)}</strong> in {getFilterLabel().toLowerCase()}
+                    </p>
+                    <p className="insight-breakdown">
+                      40% target: {formatCurrency(getInvestmentTargetInsight().targetAmount)} •{' '}
+                      {getInvestmentTargetInsight().isAhead
+                        ? `Ahead by ${formatCurrency(getInvestmentTargetInsight().difference)}`
+                        : `Lagging by ${formatCurrency(Math.abs(getInvestmentTargetInsight().difference))}`}
                     </p>
                   </div>
                 </div>

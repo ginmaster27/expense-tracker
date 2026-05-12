@@ -1,7 +1,18 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
-import { auth, googleProvider, expensesAPI, incomeAPI, familyGroupsAPI, usersAPI } from './firebase';
+import {
+  auth,
+  googleProvider,
+  expensesAPI,
+  incomeAPI,
+  familyGroupsAPI,
+  usersAPI,
+  sipsAPI,
+  insurancePoliciesAPI,
+  vehicleInsurancePoliciesAPI,
+  vehiclePollutionRecordsAPI
+} from './firebase';
 import Dashboard from './Dashboard';
 import FamilyDashboard from './FamilyDashboard';
 import ExpensesPage from './ExpenseList';
@@ -45,6 +56,10 @@ function App() {
 
   // Income state
   const [income, setIncome] = useState([]);
+  const [sips, setSips] = useState([]);
+  const [insurancePolicies, setInsurancePolicies] = useState([]);
+  const [vehicleInsurancePolicies, setVehicleInsurancePolicies] = useState([]);
+  const [pollutionRecords, setPollutionRecords] = useState([]);
   const [familyIncome, setFamilyIncome] = useState([]);
   const [incomeAmount, setIncomeAmount] = useState('');
   
@@ -860,6 +875,252 @@ function App() {
     return `${year}-${month}-${day}`;
   };
 
+  const parseISODate = (dateString, endOfDay = false) => {
+    if (!dateString) {
+      return null;
+    }
+
+    if (dateString.toDate && typeof dateString.toDate === 'function') {
+      const date = dateString.toDate();
+      date.setHours(endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+      return date;
+    }
+
+    if (dateString instanceof Date) {
+      const date = new Date(dateString);
+      date.setHours(endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+      return date;
+    }
+
+    if (typeof dateString !== 'string') {
+      return null;
+    }
+
+    const [year, month, day] = dateString.split('-').map(Number);
+    if (!year || !month || !day) {
+      return null;
+    }
+
+    return new Date(year, month - 1, day, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+  };
+
+  const getSIPStatus = (sip) => (sip.status || 'Active').trim().toLowerCase();
+
+  const getSIPStopDate = (sip) => {
+    const status = getSIPStatus(sip);
+    if (status !== 'paused' && status !== 'stopped') {
+      return null;
+    }
+
+    return parseISODate(sip.statusDate, true) || parseISODate(formatDateToISO(new Date()), true);
+  };
+
+  const getGeneratedSIPExpenseInstancesForDateRange = (startDate, endDate) => {
+    const generatedExpenses = [];
+
+    sips.forEach((sip) => {
+      const frequency = (sip.frequency || 'Monthly').trim().toLowerCase();
+      const isOneTime = frequency === 'one-time' || frequency === 'one time' || frequency === 'onetime';
+      if (frequency !== 'monthly' && frequency !== 'yearly' && !isOneTime) {
+        return;
+      }
+
+      const recurrenceStart = parseISODate(sip.renewalDate || sip.startDate);
+      if (!recurrenceStart) {
+        return;
+      }
+
+      const explicitEndDate = sip.endDate ? parseISODate(sip.endDate, true) : null;
+      const stopDate = getSIPStopDate(sip);
+      const effectiveEndDate = [explicitEndDate, stopDate].filter(Boolean).sort((a, b) => a - b)[0] || null;
+
+      if (recurrenceStart > endDate || (effectiveEndDate && effectiveEndDate < startDate)) {
+        return;
+      }
+
+      let currentDate = new Date(recurrenceStart);
+      while (currentDate <= endDate) {
+        if (currentDate >= startDate && (!effectiveEndDate || currentDate <= effectiveEndDate)) {
+          const dateStr = formatDateToISO(currentDate);
+          generatedExpenses.push({
+            id: `sip-${sip.id}-${dateStr}`,
+            amount: parseFloat(sip.amount) || 0,
+            category: 'Investments',
+            date: dateStr,
+            description: `SIP: ${sip.sipName}`,
+            type: 'personal',
+            source: 'sip',
+            sourceId: sip.id,
+            isGenerated: true,
+            isSIPExpense: true,
+            isRecurring: true,
+            frequency: frequency,
+            createdBy: user?.uid
+          });
+        }
+
+        if (isOneTime) {
+          break;
+        }
+
+        if (frequency === 'yearly') {
+          currentDate.setFullYear(currentDate.getFullYear() + 1);
+        } else {
+          const recurrenceDay = recurrenceStart.getDate();
+          const nextMonth = currentDate.getMonth() + 1;
+          const nextYear = currentDate.getFullYear() + Math.floor(nextMonth / 12);
+          const normalizedNextMonth = nextMonth % 12;
+          const lastDayOfMonth = new Date(nextYear, normalizedNextMonth + 1, 0).getDate();
+          currentDate = new Date(nextYear, normalizedNextMonth, Math.min(recurrenceDay, lastDayOfMonth));
+        }
+      }
+    });
+
+    return generatedExpenses;
+  };
+
+  const getGeneratedInvestmentExpenseInstancesForDateRange = (startDate, endDate) => {
+    const generatedExpenses = [];
+
+    const addRecurringPolicyExpenses = ({
+      items,
+      source,
+      category,
+      nameField,
+      amountField = 'amount',
+      dateFields,
+      frequencyField = 'frequency',
+      defaultFrequency = 'One-time',
+      endDateFields = [],
+      descriptionPrefix
+    }) => {
+      items.forEach((item) => {
+        const frequency = (item[frequencyField] || defaultFrequency).trim().toLowerCase();
+        const isOneTime = frequency === 'one-time' || frequency === 'one time' || frequency === 'onetime';
+        if (frequency !== 'monthly' && frequency !== 'yearly' && !isOneTime) {
+          return;
+        }
+
+        const recurrenceDateValue = dateFields.map((field) => item[field]).find(Boolean);
+        const recurrenceStart = parseISODate(recurrenceDateValue);
+        if (!recurrenceStart) {
+          return;
+        }
+
+        const explicitEndValue = endDateFields.map((field) => item[field]).find(Boolean);
+        const effectiveEndDate = explicitEndValue ? parseISODate(explicitEndValue, true) : null;
+
+        if (recurrenceStart > endDate || (effectiveEndDate && effectiveEndDate < startDate)) {
+          return;
+        }
+
+        let currentDate = new Date(recurrenceStart);
+        while (currentDate <= endDate) {
+          if (currentDate >= startDate && (!effectiveEndDate || currentDate <= effectiveEndDate)) {
+            const dateStr = formatDateToISO(currentDate);
+            generatedExpenses.push({
+              id: `${source}-${item.id}-${dateStr}`,
+              amount: parseFloat(item[amountField]) || 0,
+              category,
+              date: dateStr,
+              description: `${descriptionPrefix}: ${item[nameField] || item.vehicleNumber || 'Policy'}`,
+              type: 'personal',
+              source,
+              sourceId: item.id,
+              isGenerated: true,
+              isPolicyExpense: true,
+              isRecurring: !isOneTime,
+              frequency,
+              createdBy: user?.uid
+            });
+          }
+
+          if (isOneTime) {
+            break;
+          }
+
+          if (frequency === 'yearly') {
+            currentDate.setFullYear(currentDate.getFullYear() + 1);
+          } else {
+            const recurrenceDay = recurrenceStart.getDate();
+            const nextMonth = currentDate.getMonth() + 1;
+            const nextYear = currentDate.getFullYear() + Math.floor(nextMonth / 12);
+            const normalizedNextMonth = nextMonth % 12;
+            const lastDayOfMonth = new Date(nextYear, normalizedNextMonth + 1, 0).getDate();
+            currentDate = new Date(nextYear, normalizedNextMonth, Math.min(recurrenceDay, lastDayOfMonth));
+          }
+        }
+      });
+    };
+
+    addRecurringPolicyExpenses({
+      items: insurancePolicies,
+      source: 'insurance',
+      category: 'Insurance',
+      nameField: 'policyName',
+      dateFields: ['startDate', 'renewalDate', 'maturityDate', 'createdAt'],
+      frequencyField: 'frequency',
+      defaultFrequency: 'Yearly',
+      endDateFields: ['maturityDate'],
+      descriptionPrefix: 'Insurance'
+    });
+
+    addRecurringPolicyExpenses({
+      items: vehicleInsurancePolicies,
+      source: 'vehicle-insurance',
+      category: 'Vehicle',
+      nameField: 'vehicleNumber',
+      dateFields: ['startDate', 'renewalDate', 'expiryDate', 'createdAt'],
+      defaultFrequency: 'One-time',
+      descriptionPrefix: 'Vehicle insurance'
+    });
+
+    addRecurringPolicyExpenses({
+      items: pollutionRecords,
+      source: 'pollution',
+      category: 'Vehicle',
+      nameField: 'vehicleNumber',
+      dateFields: ['startDate', 'expiryDate', 'createdAt'],
+      defaultFrequency: 'One-time',
+      descriptionPrefix: 'Pollution certificate'
+    });
+
+    return generatedExpenses;
+  };
+
+  const getSelectedFilterDateRange = () => {
+    const now = new Date();
+
+    if (selectedMonth === 'all' && selectedYear === 'all') {
+      return {
+        startDate: new Date(0),
+        endDate: new Date(now.getFullYear() + 1, 11, 31, 23, 59, 59, 999)
+      };
+    }
+
+    if (selectedMonth === 'all') {
+      const year = parseInt(selectedYear);
+      return {
+        startDate: new Date(year, 0, 1),
+        endDate: new Date(year, 11, 31, 23, 59, 59, 999)
+      };
+    }
+
+    if (selectedYear === 'all') {
+      return {
+        startDate: new Date(0),
+        endDate: new Date(now.getFullYear() + 1, parseInt(selectedMonth), 0, 23, 59, 59, 999)
+      };
+    }
+
+    const year = parseInt(selectedYear);
+    const month = parseInt(selectedMonth) - 1;
+    return {
+      startDate: new Date(year, month, 1),
+      endDate: new Date(year, month + 1, 0, 23, 59, 59, 999)
+    };
+  };
+
   // - Editing a recurring expense updates all instances (past and future) automatically
   // - Minimal data storage (1 record instead of N occurrences)
   // - Consistent state with no sync issues
@@ -1057,8 +1318,35 @@ function App() {
 
     // Add generated recurring expense instances based on isRecurring flag
     const generatedExpenses = getGeneratedRecurringInstances();
+    const { startDate, endDate } = getSelectedFilterDateRange();
+    let generatedSIPExpenses = getGeneratedSIPExpenseInstancesForDateRange(startDate, endDate);
+    let generatedInvestmentExpenses = getGeneratedInvestmentExpenseInstancesForDateRange(startDate, endDate);
+    generatedSIPExpenses = generatedSIPExpenses.filter((expense) => {
+      const [year, month] = expense.date.split('-').map(Number);
+      const monthMatch = selectedMonth === 'all' || month === parseInt(selectedMonth);
+      const yearMatch = selectedYear === 'all' || year === parseInt(selectedYear);
+      return monthMatch && yearMatch;
+    });
+    generatedInvestmentExpenses = generatedInvestmentExpenses.filter((expense) => {
+      const [year, month] = expense.date.split('-').map(Number);
+      const monthMatch = selectedMonth === 'all' || month === parseInt(selectedMonth);
+      const yearMatch = selectedYear === 'all' || year === parseInt(selectedYear);
+      return monthMatch && yearMatch;
+    });
 
-    return [...filtered, ...generatedExpenses];
+    if (searchQuery.trim()) {
+      const searchLower = searchQuery.toLowerCase();
+      generatedSIPExpenses = generatedSIPExpenses.filter((expense) =>
+        expense.category.toLowerCase().includes(searchLower) ||
+        (expense.description || '').toLowerCase().includes(searchLower)
+      );
+      generatedInvestmentExpenses = generatedInvestmentExpenses.filter((expense) =>
+        expense.category.toLowerCase().includes(searchLower) ||
+        (expense.description || '').toLowerCase().includes(searchLower)
+      );
+    }
+
+    return [...filtered, ...generatedExpenses, ...generatedSIPExpenses, ...generatedInvestmentExpenses];
   };
 
   const filteredExpenses = getFilteredExpenses();
@@ -1116,8 +1404,12 @@ function App() {
       endOfCurrentMonth
     );
     const recurringTotal = allGeneratedInstances.reduce((sum, expense) => sum + expense.amount, 0);
+    const sipTotal = getGeneratedSIPExpenseInstancesForDateRange(new Date(0), endOfCurrentMonth)
+      .reduce((sum, expense) => sum + expense.amount, 0);
+    const investmentPolicyTotal = getGeneratedInvestmentExpenseInstancesForDateRange(new Date(0), endOfCurrentMonth)
+      .reduce((sum, expense) => sum + expense.amount, 0);
 
-    return regularTotal + recurringTotal;
+    return regularTotal + recurringTotal + sipTotal + investmentPolicyTotal;
   };
 
   // Get total income for the current year
@@ -1250,6 +1542,16 @@ function App() {
       generatedExpenses.forEach((expense) => {
         monthTotal += expense.amount;
       });
+
+      const generatedSIPExpenses = getGeneratedSIPExpenseInstancesForDateRange(monthStartDate, monthEndDate);
+      generatedSIPExpenses.forEach((expense) => {
+        monthTotal += expense.amount;
+      });
+
+      const generatedInvestmentExpenses = getGeneratedInvestmentExpenseInstancesForDateRange(monthStartDate, monthEndDate);
+      generatedInvestmentExpenses.forEach((expense) => {
+        monthTotal += expense.amount;
+      });
       
       trendData.push({
         month: monthLabel,
@@ -1284,20 +1586,50 @@ function App() {
     // Calculate current month total
     let currentMonthTotal = 0;
     expenses.forEach((expense) => {
+      if (expense.isRecurring) {
+        return;
+      }
       const [expYear, expMonth] = expense.date.split('-').map(Number);
       if (expYear === currentYear && expMonth === currentMonth) {
         currentMonthTotal += expense.amount;
       }
     });
+    currentMonthTotal += getGeneratedRecurringInstancesForDateRange(
+      new Date(currentYear, currentMonth - 1, 1),
+      new Date(currentYear, currentMonth, 0, 23, 59, 59, 999)
+    ).reduce((sum, expense) => sum + expense.amount, 0);
+    currentMonthTotal += getGeneratedSIPExpenseInstancesForDateRange(
+      new Date(currentYear, currentMonth - 1, 1),
+      new Date(currentYear, currentMonth, 0, 23, 59, 59, 999)
+    ).reduce((sum, expense) => sum + expense.amount, 0);
+    currentMonthTotal += getGeneratedInvestmentExpenseInstancesForDateRange(
+      new Date(currentYear, currentMonth - 1, 1),
+      new Date(currentYear, currentMonth, 0, 23, 59, 59, 999)
+    ).reduce((sum, expense) => sum + expense.amount, 0);
     
     // Calculate last month total
     let lastMonthTotal = 0;
     expenses.forEach((expense) => {
+      if (expense.isRecurring) {
+        return;
+      }
       const [expYear, expMonth] = expense.date.split('-').map(Number);
       if (expYear === lastYear && expMonth === lastMonth) {
         lastMonthTotal += expense.amount;
       }
     });
+    lastMonthTotal += getGeneratedRecurringInstancesForDateRange(
+      new Date(lastYear, lastMonth - 1, 1),
+      new Date(lastYear, lastMonth, 0, 23, 59, 59, 999)
+    ).reduce((sum, expense) => sum + expense.amount, 0);
+    lastMonthTotal += getGeneratedSIPExpenseInstancesForDateRange(
+      new Date(lastYear, lastMonth - 1, 1),
+      new Date(lastYear, lastMonth, 0, 23, 59, 59, 999)
+    ).reduce((sum, expense) => sum + expense.amount, 0);
+    lastMonthTotal += getGeneratedInvestmentExpenseInstancesForDateRange(
+      new Date(lastYear, lastMonth - 1, 1),
+      new Date(lastYear, lastMonth, 0, 23, 59, 59, 999)
+    ).reduce((sum, expense) => sum + expense.amount, 0);
     
     // If no data for last month, return null
     if (lastMonthTotal === 0) {
@@ -1541,9 +1873,11 @@ function App() {
 
     // Get generated recurring instances for this specific date range
     const generatedExpenses = getGeneratedRecurringInstancesForDateRange(startDate, endDate);
+    const generatedSIPExpenses = getGeneratedSIPExpenseInstancesForDateRange(startDate, endDate);
+    const generatedInvestmentExpenses = getGeneratedInvestmentExpenseInstancesForDateRange(startDate, endDate);
 
     // Combine both filtered and generated expenses, sorted by date (newest first)
-    const allExpenses = [...filteredExpenses, ...generatedExpenses];
+    const allExpenses = [...filteredExpenses, ...generatedExpenses, ...generatedSIPExpenses, ...generatedInvestmentExpenses];
     return allExpenses.sort((a, b) => new Date(b.date) - new Date(a.date));
   };
 
@@ -1710,6 +2044,29 @@ function App() {
           if (cachedIncome.length > 0) {
             setIncome(cachedIncome);
           }
+
+          // Load existing SIPs immediately so generated SIP expenses are available
+          // before the investments module is opened.
+          const investmentLoads = await Promise.allSettled([
+            sipsAPI.getSIPs(currentUser.uid),
+            insurancePoliciesAPI.getPolicies(currentUser.uid),
+            vehicleInsurancePoliciesAPI.getVehiclePolicies(currentUser.uid),
+            vehiclePollutionRecordsAPI.getRecords(currentUser.uid)
+          ]);
+
+          const getSettledArray = (index, label) => {
+            const result = investmentLoads[index];
+            if (result.status === 'fulfilled') {
+              return Array.isArray(result.value) ? result.value : [];
+            }
+            console.warn(`Could not load ${label} for expense generation:`, result.reason?.message || result.reason);
+            return [];
+          };
+
+          setSips(getSettledArray(0, 'SIPs'));
+          setInsurancePolicies(getSettledArray(1, 'insurance policies'));
+          setVehicleInsurancePolicies(getSettledArray(2, 'vehicle insurance policies'));
+          setPollutionRecords(getSettledArray(3, 'pollution records'));
           
           // Step 3: Set up real-time listeners
           // These will fire once immediately with current data, then again on every change
@@ -1739,10 +2096,42 @@ function App() {
               setCacheWithTimestamp('income', validatedIncome);
             }
           );
+
+          const unsubscribeSIPs = sipsAPI.listenToSIPs(
+            currentUser.uid,
+            (updatedSIPs) => {
+              setSips(Array.isArray(updatedSIPs) ? updatedSIPs : []);
+            }
+          );
+
+          const unsubscribeInsurancePolicies = insurancePoliciesAPI.listenToPolicies(
+            currentUser.uid,
+            (updatedPolicies) => {
+              setInsurancePolicies(Array.isArray(updatedPolicies) ? updatedPolicies : []);
+            }
+          );
+
+          const unsubscribeVehicleInsurancePolicies = vehicleInsurancePoliciesAPI.listenToVehiclePolicies(
+            currentUser.uid,
+            (updatedPolicies) => {
+              setVehicleInsurancePolicies(Array.isArray(updatedPolicies) ? updatedPolicies : []);
+            }
+          );
+
+          const unsubscribePollutionRecords = vehiclePollutionRecordsAPI.listenToRecords(
+            currentUser.uid,
+            (updatedRecords) => {
+              setPollutionRecords(Array.isArray(updatedRecords) ? updatedRecords : []);
+            }
+          );
           
           // Store unsubscribe functions to clean up on logout
           window.__expensesUnsubscribe = unsubscribeExpenses;
           window.__incomeUnsubscribe = unsubscribeIncome;
+          window.__sipsUnsubscribe = unsubscribeSIPs;
+          window.__insurancePoliciesUnsubscribe = unsubscribeInsurancePolicies;
+          window.__vehicleInsurancePoliciesUnsubscribe = unsubscribeVehicleInsurancePolicies;
+          window.__pollutionRecordsUnsubscribe = unsubscribePollutionRecords;
           
           // Load user's family group if they belong to one
           try {
@@ -1779,6 +2168,10 @@ function App() {
 
           setExpenses(expenses);
           setIncome(income);
+          setSips([]);
+          setInsurancePolicies([]);
+          setVehicleInsurancePolicies([]);
+          setPollutionRecords([]);
           setUserGroup(null);
           setUserRole(null);
         }
@@ -1805,6 +2198,22 @@ function App() {
         window.__incomeUnsubscribe();
         window.__incomeUnsubscribe = null;
       }
+      if (window.__sipsUnsubscribe) {
+        window.__sipsUnsubscribe();
+        window.__sipsUnsubscribe = null;
+      }
+      if (window.__insurancePoliciesUnsubscribe) {
+        window.__insurancePoliciesUnsubscribe();
+        window.__insurancePoliciesUnsubscribe = null;
+      }
+      if (window.__vehicleInsurancePoliciesUnsubscribe) {
+        window.__vehicleInsurancePoliciesUnsubscribe();
+        window.__vehicleInsurancePoliciesUnsubscribe = null;
+      }
+      if (window.__pollutionRecordsUnsubscribe) {
+        window.__pollutionRecordsUnsubscribe();
+        window.__pollutionRecordsUnsubscribe = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1825,10 +2234,26 @@ function App() {
       
       const firestoreIncome = await incomeAPI.getIncome(user.uid);
       const validatedIncome = validateExpenseData(firestoreIncome);
+
+      const investmentLoads = await Promise.allSettled([
+        sipsAPI.getSIPs(user.uid),
+        insurancePoliciesAPI.getPolicies(user.uid),
+        vehicleInsurancePoliciesAPI.getVehiclePolicies(user.uid),
+        vehiclePollutionRecordsAPI.getRecords(user.uid)
+      ]);
+
+      const getSettledArray = (index) => {
+        const result = investmentLoads[index];
+        return result.status === 'fulfilled' && Array.isArray(result.value) ? result.value : [];
+      };
       
       // Update state
       setExpenses(validatedExpenses);
       setIncome(validatedIncome);
+      setSips(getSettledArray(0));
+      setInsurancePolicies(getSettledArray(1));
+      setVehicleInsurancePolicies(getSettledArray(2));
+      setPollutionRecords(getSettledArray(3));
       
       // Update cache with fresh timestamps
       setCacheWithTimestamp('expenses', validatedExpenses);
@@ -1884,6 +2309,22 @@ function App() {
         window.__incomeUnsubscribe();
         window.__incomeUnsubscribe = null;
       }
+      if (window.__sipsUnsubscribe) {
+        window.__sipsUnsubscribe();
+        window.__sipsUnsubscribe = null;
+      }
+      if (window.__insurancePoliciesUnsubscribe) {
+        window.__insurancePoliciesUnsubscribe();
+        window.__insurancePoliciesUnsubscribe = null;
+      }
+      if (window.__vehicleInsurancePoliciesUnsubscribe) {
+        window.__vehicleInsurancePoliciesUnsubscribe();
+        window.__vehicleInsurancePoliciesUnsubscribe = null;
+      }
+      if (window.__pollutionRecordsUnsubscribe) {
+        window.__pollutionRecordsUnsubscribe();
+        window.__pollutionRecordsUnsubscribe = null;
+      }
       
       await signOut(auth);
       setUser(null);
@@ -1891,6 +2332,10 @@ function App() {
       setUserRole(null);
       setFamilyIncome([]);
       setFamilySharedExpenses([]);
+      setSips([]);
+      setInsurancePolicies([]);
+      setVehicleInsurancePolicies([]);
+      setPollutionRecords([]);
     } catch (error) {
       console.error('Logout error:', error);
       setError('Failed to logout: ' + error.message);

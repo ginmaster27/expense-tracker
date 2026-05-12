@@ -123,12 +123,25 @@ function InvestmentsModule({
     if (!user) return;
     setIsSubmittingSIP(true);
     try {
+      const existingSIP = editingSIPId ? sips.find(s => s.id === editingSIPId) : null;
+      const existingStatus = existingSIP?.status || 'Active';
+      const nextStatus = sipData.status || 'Active';
+      const statusChanged = existingStatus !== nextStatus;
+      const statusDate =
+        nextStatus === 'Paused' || nextStatus === 'Stopped'
+          ? (statusChanged ? new Date().toISOString().split('T')[0] : existingSIP?.statusDate || new Date().toISOString().split('T')[0])
+          : null;
+      const dataToSave = {
+        ...sipData,
+        statusDate
+      };
+
       if (editingSIPId) {
-        await sipsAPI.updateSIP(user.uid, editingSIPId, sipData);
+        await sipsAPI.updateSIP(user.uid, editingSIPId, dataToSave);
         showToast('SIP updated successfully', 'success');
         setEditingSIPId(null);
       } else {
-        await sipsAPI.addSIP(user.uid, sipData);
+        await sipsAPI.addSIP(user.uid, dataToSave);
         showToast('SIP added successfully', 'success');
       }
       setShowSIPForm(false);

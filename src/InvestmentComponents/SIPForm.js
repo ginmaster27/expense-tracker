@@ -6,8 +6,10 @@ function SIPForm({ editingId, existingSIP, onSubmit, onCancel, isSubmitting, dar
     sipName: '',
     amount: '',
     startDate: '',
+    renewalDate: '',
     endDate: '',
     frequency: 'Monthly',
+    status: 'Active',
     whoPaid: '',
     notes: '',
   });
@@ -21,8 +23,10 @@ function SIPForm({ editingId, existingSIP, onSubmit, onCancel, isSubmitting, dar
         sipName: existingSIP.sipName || '',
         amount: existingSIP.amount || '',
         startDate: existingSIP.startDate || '',
+        renewalDate: existingSIP.renewalDate || '',
         endDate: existingSIP.endDate || '',
         frequency: existingSIP.frequency || 'Monthly',
+        status: existingSIP.status || 'Active',
         whoPaid: existingSIP.whoPaid || '',
         notes: existingSIP.notes || '',
       });
@@ -119,6 +123,21 @@ function SIPForm({ editingId, existingSIP, onSubmit, onCancel, isSubmitting, dar
             >
               <option value="Monthly">Monthly</option>
               <option value="Yearly">Yearly</option>
+              <option value="One-time">One-time</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="status">Status *</label>
+            <select
+              id="status"
+              name="status"
+              value={formData.status}
+              onChange={handleChange}
+            >
+              <option value="Active">Active</option>
+              <option value="Paused">Paused</option>
+              <option value="Stopped">Stopped</option>
             </select>
           </div>
 
@@ -132,6 +151,17 @@ function SIPForm({ editingId, existingSIP, onSubmit, onCancel, isSubmitting, dar
               onChange={handleChange}
             />
             {errors.startDate && <span className="error-message">{errors.startDate}</span>}
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="renewalDate">Renewal Date</label>
+            <input
+              id="renewalDate"
+              type="date"
+              name="renewalDate"
+              value={formData.renewalDate}
+              onChange={handleChange}
+            />
           </div>
 
           <div className="form-group">

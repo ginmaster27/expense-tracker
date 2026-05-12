@@ -41,12 +41,14 @@ function ExpensesPage({
       'Food': '🍔',
       'Travel': '✈️',
       'Rent': '🏠',
+      'Insurance': '🛡️',
       'Groceries': '🛒',
       'Utilities': '⚡',
       'Entertainment': '🎬',
       'Vehicle': '🚗',
       'Medical': '⚕️',
       'EMI': '💳',
+      'Investments': '💼',
       'Others': '📦'
     };
     return icons[category] || '📌';
@@ -247,6 +249,12 @@ function ExpensesPage({
                         {expense.isProjected && (
                           <span className="projected-badge">📋 Projected</span>
                         )}
+                        {expense.isSIPExpense && (
+                          <span className="recurring-badge">💼 SIP</span>
+                        )}
+                        {expense.isPolicyExpense && (
+                          <span className="recurring-badge">🛡️ Policy</span>
+                        )}
                       </div>
                       <div className="expense-date">{formatDate(expense.date)}</div>
                       {expense.description && <div className="expense-description">{expense.description}</div>}
@@ -254,7 +262,7 @@ function ExpensesPage({
                   </div>
                   <div className="expense-right">
                     <div className="expense-amount">{formatCurrency(expense.amount)}</div>
-                    {!expense.isProjected && (
+                    {!expense.isProjected && !expense.isSIPExpense && !expense.isPolicyExpense && (
                       <>
                         <button
                           className="edit-btn"

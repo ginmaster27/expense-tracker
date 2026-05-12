@@ -3460,6 +3460,20 @@
   font-size: 1.1rem;
 }
 
+.breakdown-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  text-align: right;
+}
+
+.breakdown-percentage {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 .view-all-btn {
   width: 100%;
   padding: 14px 16px;

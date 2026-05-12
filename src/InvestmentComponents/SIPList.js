@@ -49,6 +49,13 @@ function SIPList({ sips, topUps, onEdit, onDelete, onAddTopUp, onDeleteTopUp, lo
     return topUps.filter((tu) => tu.sipReference === sipId);
   };
 
+  const getStatusClass = (status) => {
+    const normalizedStatus = status || 'Active';
+    if (normalizedStatus === 'Paused') return 'renewal-soon';
+    if (normalizedStatus === 'Stopped') return 'expired-status';
+    return 'active';
+  };
+
   if (loading) {
     return <div className="loading-state">Loading SIPs...</div>;
   }
@@ -82,7 +89,10 @@ function SIPList({ sips, topUps, onEdit, onDelete, onAddTopUp, onDeleteTopUp, lo
                     ₹{sip.amount.toFixed(2)} • {sip.frequency}
                   </div>
                   <div className="sip-card-start-date">
-                    📅 {sip.startDate}
+                    📅 {sip.renewalDate || sip.startDate}
+                    <span className={`status-badge ${getStatusClass(sip.status)}`}>
+                      {sip.status || 'Active'}
+                    </span>
                   </div>
                 </div>
 
@@ -160,6 +170,20 @@ function SIPList({ sips, topUps, onEdit, onDelete, onAddTopUp, onDeleteTopUp, lo
               <div className="detail-row">
                 <label>Start Date:</label>
                 <span className="detail-value">{selectedSIP.startDate}</span>
+              </div>
+
+              <div className="detail-row">
+                <label>Renewal Date:</label>
+                <span className="detail-value">{selectedSIP.renewalDate || selectedSIP.startDate}</span>
+              </div>
+
+              <div className="detail-row">
+                <label>Status:</label>
+                <span className="detail-value">
+                  <span className={`status-badge ${getStatusClass(selectedSIP.status)}`}>
+                    {selectedSIP.status || 'Active'}
+                  </span>
+                </span>
               </div>
 
               {/* End Date */}
