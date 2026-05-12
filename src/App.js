@@ -2534,6 +2534,23 @@ function App() {
     }
   };
 
+  const getFamilyDashboardSharedExpenses = () => {
+    const now = new Date();
+    const startDate = new Date(0);
+    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const generatedInvestmentExpenses = [
+      ...getGeneratedSIPExpenseInstancesForDateRange(startDate, endDate),
+      ...getGeneratedInvestmentExpenseInstancesForDateRange(startDate, endDate)
+    ].map((expense) => ({
+      ...expense,
+      id: `family-${expense.id}`,
+      type: 'shared',
+      isRecurring: false
+    }));
+
+    return [...familySharedExpenses, ...generatedInvestmentExpenses];
+  };
+
   return (
     <BrowserRouter>
       <Routes>
@@ -2544,7 +2561,7 @@ function App() {
               <FamilyDashboard
                 userGroup={userGroup}
                 userRole={userRole}
-                expenses={familySharedExpenses}
+                expenses={getFamilyDashboardSharedExpenses()}
                 personalExpenses={familyPersonalExpenses}
                 income={familyIncome}
                 user={user}
@@ -2553,6 +2570,9 @@ function App() {
                 formatCurrency={formatCurrency}
                 formatDate={formatDate}
                 onSwitchToPersonal={() => setViewingFamilyDashboard(false)}
+                onLogout={handleLogout}
+                onSignIn={handleSignInWithGoogle}
+                onOpenFamilyGroup={() => setShowGroupManager(true)}
                 onEditExpense={handleEditExpense}
                 onDeleteExpense={handleDeleteExpense}
                 onEditIncome={handleEditIncome}

@@ -311,6 +311,138 @@ function InvestmentsModule({
     setShowPollutionForm(true);
   };
 
+  const parseISODate = (dateValue, endOfDay = false) => {
+    if (!dateValue) return null;
+    if (dateValue.toDate && typeof dateValue.toDate === 'function') {
+      const date = dateValue.toDate();
+      date.setHours(endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+      return date;
+    }
+    if (dateValue instanceof Date) {
+      const date = new Date(dateValue);
+      date.setHours(endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+      return date;
+    }
+    if (typeof dateValue !== 'string') return null;
+    const [year, month, day] = dateValue.split('-').map(Number);
+    if (!year || !month || !day) return null;
+    return new Date(year, month - 1, day, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+  };
+
+  const formatDateToISO = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getSIPStopDate = (sip) => {
+    const status = (sip.status || 'Active').trim().toLowerCase();
+    if (status !== 'paused' && status !== 'stopped') return null;
+    return parseISODate(sip.statusDate, true) || parseISODate(formatDateToISO(new Date()), true);
+  };
+
+  const getSIPInvestmentInstancesForDateRange = (startDate, endDate) => {
+    const instances = [];
+
+    sips.forEach((sip) => {
+      const frequency = (sip.frequency || 'Monthly').trim().toLowerCase();
+      const isMonthly = frequency.includes('month') || frequency === 'monthy';
+      const isYearly = frequency.includes('year');
+      const isOneTime = frequency === 'one-time' || frequency === 'one time' || frequency === 'onetime';
+      if (!isMonthly && !isYearly && !isOneTime) return;
+
+      const sipStartDate = parseISODate(sip.startDate);
+      const renewalDate = parseISODate(sip.renewalDate);
+      const firstKnownDate = sipStartDate || renewalDate;
+      if (!firstKnownDate) return;
+
+      const explicitEndDate = sip.endDate ? parseISODate(sip.endDate, true) : null;
+      const stopDate = getSIPStopDate(sip);
+      const effectiveEndDate = [explicitEndDate, stopDate].filter(Boolean).sort((a, b) => a - b)[0] || null;
+      if (firstKnownDate > endDate || (effectiveEndDate && effectiveEndDate < startDate)) return;
+
+      const addInstance = (date) => {
+        if (!date || date < startDate || date > endDate || (effectiveEndDate && date > effectiveEndDate)) return;
+        instances.push({
+          id: `${sip.id}-${formatDateToISO(date)}`,
+          date: formatDateToISO(date),
+          amount: parseFloat(sip.amount) || 0
+        });
+      };
+
+      if (isOneTime) {
+        addInstance(firstKnownDate);
+        return;
+      }
+
+      if (sipStartDate) {
+        addInstance(sipStartDate);
+      }
+
+      if (isMonthly) {
+        const anchorDate = renewalDate || sipStartDate;
+        const recurrenceDay = anchorDate.getDate();
+        const firstMonth = new Date(firstKnownDate.getFullYear(), firstKnownDate.getMonth(), 1);
+        const rangeStartMonth = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+        let currentMonth = firstMonth > rangeStartMonth ? firstMonth : rangeStartMonth;
+
+        while (currentMonth <= endDate) {
+          const lastDayOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
+          const occurrenceDate = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), Math.min(recurrenceDay, lastDayOfMonth));
+          const isAfterInitialPayment = sipStartDate ? occurrenceDate > sipStartDate : occurrenceDate >= firstKnownDate;
+          if (isAfterInitialPayment) addInstance(occurrenceDate);
+          currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
+        }
+        return;
+      }
+
+      if (isYearly) {
+        const anchorDate = renewalDate || sipStartDate;
+        const recurrenceMonth = anchorDate.getMonth();
+        const recurrenceDay = anchorDate.getDate();
+        const firstYear = Math.max(firstKnownDate.getFullYear(), startDate.getFullYear());
+
+        for (let year = firstYear; year <= endDate.getFullYear(); year += 1) {
+          const lastDayOfMonth = new Date(year, recurrenceMonth + 1, 0).getDate();
+          const occurrenceDate = new Date(year, recurrenceMonth, Math.min(recurrenceDay, lastDayOfMonth));
+          const isAfterInitialPayment = sipStartDate ? occurrenceDate > sipStartDate : occurrenceDate >= firstKnownDate;
+          if (isAfterInitialPayment) addInstance(occurrenceDate);
+        }
+      }
+    });
+
+    return instances;
+  };
+
+  const getTopUpTotalForDateRange = (startDate, endDate) => (
+    sipTopUps.reduce((sum, topUp) => {
+      const topUpDate = parseISODate(topUp.date);
+      if (!topUpDate || topUpDate < startDate || topUpDate > endDate) return sum;
+      return sum + (parseFloat(topUp.topUpAmount) || 0);
+    }, 0)
+  );
+
+  const getSIPSummary = () => {
+    const today = new Date();
+    const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const currentMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+    const allTimeStart = new Date(0);
+    const allTimeEnd = currentMonthEnd;
+
+    const monthlySIPTotal = getSIPInvestmentInstancesForDateRange(currentMonthStart, currentMonthEnd)
+      .reduce((sum, instance) => sum + instance.amount, 0);
+    const allTimeSIPTotal = getSIPInvestmentInstancesForDateRange(allTimeStart, allTimeEnd)
+      .reduce((sum, instance) => sum + instance.amount, 0);
+
+    return {
+      monthly: monthlySIPTotal + getTopUpTotalForDateRange(currentMonthStart, currentMonthEnd),
+      allTime: allTimeSIPTotal + getTopUpTotalForDateRange(allTimeStart, allTimeEnd)
+    };
+  };
+
+  const sipSummary = getSIPSummary();
+
   if (!user) {
     return (
       <div className={`investments-module ${darkMode ? 'dark-mode' : ''}`}>
@@ -396,6 +528,19 @@ function InvestmentsModule({
                   )}
                 </div>
               </div>
+
+              {!showSIPForm && !showTopUpForm && (
+                <div className="sip-summary-grid">
+                  <div className="sip-summary-card">
+                    <span className="sip-summary-label">Current Month Investment</span>
+                    <strong className="sip-summary-value">₹{sipSummary.monthly.toFixed(2)}</strong>
+                  </div>
+                  <div className="sip-summary-card">
+                    <span className="sip-summary-label">All Time Investment</span>
+                    <strong className="sip-summary-value">₹{sipSummary.allTime.toFixed(2)}</strong>
+                  </div>
+                </div>
+              )}
 
               {showSIPForm && (
                 <SIPForm

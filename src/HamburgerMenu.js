@@ -8,15 +8,11 @@ function HamburgerMenu({
   userGroup,
   darkMode,
   onOpenFamilyGroup,
-  onOpenFamilyDashboard
+  onOpenFamilyDashboard,
+  onSwitchToPersonal
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
-
-  const handleNavigation = (path) => {
-    navigate(path);
-    setIsOpen(false);
-  };
 
   const handleLogout = () => {
     onLogout();
@@ -79,19 +75,19 @@ function HamburgerMenu({
             <nav className="menu-items">
               <button
                 className="menu-item"
-                onClick={() => handleNavigation('/')}
+                onClick={() => handleAction(onSwitchToPersonal, '/')}
               >
-                📊 Dashboard
+                📊 Personal Mode
               </button>
               <button
                 className="menu-item"
-                onClick={() => handleNavigation('/expenses')}
+                onClick={() => handleAction(null, '/expenses')}
               >
-                💰 Expenses
+                💰 All Expenses
               </button>
               <button
                 className="menu-item"
-                onClick={() => handleNavigation('/investments')}
+                onClick={() => handleAction(null, '/investments')}
               >
                 💼 Investments & Policies
               </button>

@@ -10,7 +10,8 @@ function AppHeader({
   onSignIn,
   userGroup,
   onOpenFamilyGroup,
-  onOpenFamilyDashboard
+  onOpenFamilyDashboard,
+  onSwitchToPersonal
 }) {
   return (
     <div className="header app-header">
@@ -37,6 +38,7 @@ function AppHeader({
             darkMode={darkMode}
             onOpenFamilyGroup={onOpenFamilyGroup}
             onOpenFamilyDashboard={onOpenFamilyDashboard}
+            onSwitchToPersonal={onSwitchToPersonal}
           />
         )}
       </div>

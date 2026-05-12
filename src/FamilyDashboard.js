@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import AdminTools from './AdminTools';
+import AppHeader from './AppHeader';
 
 function FamilyDashboard({
   userGroup,
@@ -14,16 +15,19 @@ function FamilyDashboard({
   formatCurrency,
   formatDate,
   onSwitchToPersonal,
-  onEditExpense,
-  onDeleteExpense,
-  onEditIncome,
-  onDeleteIncome,
-  onAddExpense,
-  onAddIncome
+  onLogout,
+  onSignIn,
+  onOpenFamilyGroup
 }) {
-  const [selectedMember, setSelectedMember] = useState(null);
-  const [filterType, setFilterType] = useState('all'); // all, expenses, income
-  const [categoryFilterMonth, setCategoryFilterMonth] = useState('current'); // 'current' or number 1-12 for all-time month selection
+  const [categoryFilterMonth, setCategoryFilterMonth] = useState('current');
+  const [transactionFilterMonth, setTransactionFilterMonth] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [transactionType, setTransactionType] = useState('all');
+  const [incomeDrawerOpen, setIncomeDrawerOpen] = useState(false);
+
+  const COLORS = ['#2e7d32', '#1976d2', '#f57c00', '#7b1fa2', '#00897b', '#c62828', '#455a64'];
 
   if (!userGroup) {
     return (
@@ -33,22 +37,26 @@ function FamilyDashboard({
     );
   }
 
-  // Filter to only shared expenses for family dashboard
-  // expenses prop (familySharedExpenses) already contains only shared expenses
+  const members = userGroup.members || [];
   const sharedExpenses = expenses || [];
-  const currentMonthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  const currentMonthEnd = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59, 999);
+  const personalExpenseList = personalExpenses || [];
+  const incomeList = income || [];
 
-  const parseISODate = (dateString, endOfDay = false) => {
-    if (!dateString || typeof dateString !== 'string') {
-      return null;
+  const parseISODate = (dateValue, endOfDay = false) => {
+    if (!dateValue) return null;
+    if (dateValue.toDate && typeof dateValue.toDate === 'function') {
+      const date = dateValue.toDate();
+      date.setHours(endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+      return date;
     }
-
-    const [year, month, day] = dateString.split('-').map(Number);
-    if (!year || !month || !day) {
-      return null;
+    if (dateValue instanceof Date) {
+      const date = new Date(dateValue);
+      date.setHours(endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
+      return date;
     }
-
+    if (typeof dateValue !== 'string') return null;
+    const [year, month, day] = dateValue.split('-').map(Number);
+    if (!year || !month || !day) return null;
     return new Date(year, month - 1, day, endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0, endOfDay ? 999 : 0);
   };
 
@@ -59,137 +67,141 @@ function FamilyDashboard({
     return `${year}-${month}-${day}`;
   };
 
-  const getExpensesForDateRange = (expenseList, startDate, endDate) => {
-    const rangeExpenses = [];
-    const seenRecurringKeys = new Set();
+  const getMemberName = (userId) => members.find((member) => member.userId === userId)?.name || 'Unknown';
+
+  const getMonthKey = (dateValue) => {
+    const date = parseISODate(dateValue);
+    if (!date) return '';
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  };
+
+  const getMonthLabel = (monthKey) => {
+    const [year, month] = monthKey.split('-').map(Number);
+    if (!year || !month) return 'Unknown';
+    return new Date(year, month - 1, 1).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+  };
+
+  const getMonthRange = (monthKey) => {
+    const [year, month] = monthKey.split('-').map(Number);
+    return {
+      startDate: new Date(year, month - 1, 1),
+      endDate: new Date(year, month, 0, 23, 59, 59, 999)
+    };
+  };
+
+  const today = new Date();
+  const currentMonthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  const currentMonthRange = getMonthRange(currentMonthKey);
+  const allTimeRange = {
+    startDate: new Date(0),
+    endDate: currentMonthRange.endDate
+  };
+
+  const expandExpensesForRange = (expenseList, startDate, endDate) => {
+    const expanded = [];
+    const seenKeys = new Set();
 
     expenseList.forEach((expense) => {
       const expenseStartDate = parseISODate(expense.date);
       if (!expenseStartDate) return;
 
+      const addExpense = (date, isGenerated = false) => {
+        if (date < startDate || date > endDate) return;
+        const dateStr = formatDateToISO(date);
+        const key = `${expense.id}-${dateStr}`;
+        if (seenKeys.has(key)) return;
+        seenKeys.add(key);
+        expanded.push({
+          ...expense,
+          id: isGenerated ? key : expense.id,
+          date: dateStr,
+          isGenerated: expense.isGenerated || isGenerated
+        });
+      };
+
       if (!expense.isRecurring) {
-        if (expenseStartDate >= startDate && expenseStartDate <= endDate) {
-          rangeExpenses.push(expense);
-        }
+        addExpense(expenseStartDate);
         return;
       }
 
       const expenseEndDate = expense.endDate ? parseISODate(expense.endDate, true) : null;
-      if (expenseStartDate > endDate || (expenseEndDate && expenseEndDate < startDate)) {
+      if (expenseStartDate > endDate || (expenseEndDate && expenseEndDate < startDate)) return;
+
+      const frequency = (expense.frequency || 'monthly').toLowerCase();
+      let cursor = new Date(expenseStartDate);
+
+      if (frequency === 'daily') {
+        while (cursor <= endDate) {
+          if (!expenseEndDate || cursor <= expenseEndDate) addExpense(new Date(cursor), true);
+          cursor.setDate(cursor.getDate() + 1);
+        }
         return;
       }
 
-      const frequency = expense.frequency || 'monthly';
-      let currentDate = new Date(expenseStartDate);
-
-      const addOccurrence = (occurrenceDate) => {
-        if (
-          occurrenceDate < startDate ||
-          occurrenceDate > endDate ||
-          occurrenceDate < expenseStartDate ||
-          (expenseEndDate && occurrenceDate > expenseEndDate)
-        ) {
-          return;
+      if (frequency === 'weekly') {
+        while (cursor <= endDate) {
+          if (!expenseEndDate || cursor <= expenseEndDate) addExpense(new Date(cursor), true);
+          cursor.setDate(cursor.getDate() + 7);
         }
+        return;
+      }
 
-        const dateStr = formatDateToISO(occurrenceDate);
-        if (expense.excludedDates && expense.excludedDates.includes(dateStr)) {
-          return;
+      if (frequency === 'yearly') {
+        while (cursor <= endDate) {
+          if (!expenseEndDate || cursor <= expenseEndDate) addExpense(new Date(cursor), true);
+          cursor.setFullYear(cursor.getFullYear() + 1);
         }
+        return;
+      }
 
-        const key = `${expense.id}-${dateStr}`;
-        if (seenRecurringKeys.has(key)) {
-          return;
+      const dayOfMonth = expenseStartDate.getDate();
+      cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+      while (cursor <= endDate) {
+        const lastDayOfMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
+        const occurrence = new Date(cursor.getFullYear(), cursor.getMonth(), Math.min(dayOfMonth, lastDayOfMonth));
+        if (occurrence >= expenseStartDate && (!expenseEndDate || occurrence <= expenseEndDate)) {
+          addExpense(occurrence, true);
         }
-
-        seenRecurringKeys.add(key);
-        rangeExpenses.push({
-          ...expense,
-          id: key,
-          date: dateStr,
-          isGenerated: true
-        });
-      };
-
-      if (frequency === 'daily') {
-        while (currentDate <= endDate) {
-          addOccurrence(new Date(currentDate));
-          currentDate.setDate(currentDate.getDate() + 1);
-        }
-      } else if (frequency === 'weekly') {
-        while (currentDate <= endDate) {
-          addOccurrence(new Date(currentDate));
-          currentDate.setDate(currentDate.getDate() + 7);
-        }
-      } else if (frequency === 'yearly') {
-        while (currentDate <= endDate) {
-          addOccurrence(new Date(currentDate));
-          currentDate.setFullYear(currentDate.getFullYear() + 1);
-        }
-      } else {
-        const dayOfMonth = expenseStartDate.getDate();
-        currentDate = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-
-        while (currentDate <= endDate) {
-          const year = currentDate.getFullYear();
-          const month = currentDate.getMonth();
-          const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
-          const dayToUse = Math.min(dayOfMonth, lastDayOfMonth);
-
-          addOccurrence(new Date(year, month, dayToUse));
-          currentDate.setMonth(currentDate.getMonth() + 1);
-        }
+        cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
       }
     });
 
-    return rangeExpenses;
+    return expanded;
   };
 
-  const currentMonthSharedExpenses = getExpensesForDateRange(sharedExpenses, currentMonthStart, currentMonthEnd);
-  const currentMonthPersonalExpenses = getExpensesForDateRange(personalExpenses || [], currentMonthStart, currentMonthEnd);
+  const allTimeSharedExpenses = expandExpensesForRange(sharedExpenses, allTimeRange.startDate, allTimeRange.endDate);
+  const currentMonthSharedExpenses = expandExpensesForRange(sharedExpenses, currentMonthRange.startDate, currentMonthRange.endDate);
+  const allTimePersonalExpenses = expandExpensesForRange(personalExpenseList, allTimeRange.startDate, allTimeRange.endDate);
 
-  // Calculate total expenses from shared and personal
-  const totalSharedExpenses = sharedExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
-  const totalPersonalExpenses = (personalExpenses || []).reduce((sum, exp) => sum + (exp.amount || 0), 0);
-  const totalFamilyExpenses = totalSharedExpenses + totalPersonalExpenses;
-  const totalFamilyIncome = income.reduce((sum, inc) => sum + (inc.amount || 0), 0);
-  
-  // Calculate monthly family income
-  const getMonthlyIncome = () => {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    
-    return income.reduce((sum, inc) => {
-      if (inc.date) {
-        const incomeDate = new Date(inc.date);
-        if (incomeDate.getMonth() === currentMonth && incomeDate.getFullYear() === currentYear) {
-          return sum + (inc.amount || 0);
-        }
-      }
-      return sum;
-    }, 0);
-  };
-  
-  // Calculate monthly family expenses
-  const getMonthlyExpenses = () => {
-    return [...currentMonthSharedExpenses, ...currentMonthPersonalExpenses]
-      .reduce((sum, exp) => sum + (exp.amount || 0), 0);
-  };
-  
-  const monthlyFamilyIncome = getMonthlyIncome();
-  const monthlyFamilyExpenses = getMonthlyExpenses();
-  const monthlyBalance = monthlyFamilyIncome - monthlyFamilyExpenses;
-  const familyBalance = totalFamilyIncome - totalFamilyExpenses;
+  const isInvestmentExpense = (expense) => (
+    expense.isSIPExpense ||
+    expense.source === 'sip' ||
+    expense.category === 'Investments'
+  );
 
-  // Get member list from userGroup
-  const members = userGroup.members || [];
+  const incomeThroughCurrentMonth = incomeList.filter((item) => {
+    const date = parseISODate(item.date);
+    return date && date <= allTimeRange.endDate;
+  });
+  const currentMonthIncome = incomeList.filter((item) => {
+    const date = parseISODate(item.date);
+    return date && date >= currentMonthRange.startDate && date <= currentMonthRange.endDate;
+  });
 
-  // Calculate member contributions (expenses per member)
-  const getMemberContributions = () => {
-    const contributions = {};
-    members.forEach(member => {
-      contributions[member.userId] = {
+  const sumAmount = (items) => items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
+  const totalFamilyIncome = sumAmount(incomeThroughCurrentMonth);
+  const monthlyFamilyIncome = sumAmount(currentMonthIncome);
+  const totalSharedExpenses = sumAmount(allTimeSharedExpenses);
+  const monthlySharedExpenses = sumAmount(currentMonthSharedExpenses);
+  const totalFamilyBalance = totalFamilyIncome - totalSharedExpenses;
+  const monthlyBalance = monthlyFamilyIncome - monthlySharedExpenses;
+  const allTimeInvestmentTotal = sumAmount(allTimeSharedExpenses.filter(isInvestmentExpense));
+  const monthlyInvestmentTotal = sumAmount(currentMonthSharedExpenses.filter(isInvestmentExpense));
+
+  const buildMemberContribution = (expenseRows, incomeRows, denominator) => {
+    const contributionMap = {};
+    members.forEach((member) => {
+      contributionMap[member.userId] = {
         id: member.userId,
         name: member.name,
         spent: 0,
@@ -199,666 +211,257 @@ function FamilyDashboard({
       };
     });
 
-    // Add shared expenses
-    sharedExpenses.forEach(exp => {
-      if (contributions[exp.createdBy]) {
-        contributions[exp.createdBy].spent += exp.amount || 0;
+    expenseRows.forEach((expense) => {
+      if (contributionMap[expense.createdBy]) {
+        contributionMap[expense.createdBy].spent += parseFloat(expense.amount) || 0;
       }
     });
 
-    // Add income
-    income.forEach(inc => {
-      if (contributions[inc.userId]) {
-        contributions[inc.userId].earned += inc.amount || 0;
+    incomeRows.forEach((item) => {
+      if (contributionMap[item.userId]) {
+        contributionMap[item.userId].earned += parseFloat(item.amount) || 0;
       }
     });
 
-    // Calculate balance and percentage
-    const sortedBySpending = Object.values(contributions).sort((a, b) => b.spent - a.spent);
-    sortedBySpending.forEach(member => {
-      member.balance = member.earned - member.spent;
-      member.spendPercentage = totalFamilyExpenses > 0 ? ((member.spent / totalFamilyExpenses) * 100).toFixed(1) : 0;
-    });
-
-    return sortedBySpending;
+    return Object.values(contributionMap)
+      .map((member) => ({
+        ...member,
+        balance: member.earned - member.spent,
+        spendPercentage: denominator > 0 ? ((member.spent / denominator) * 100).toFixed(1) : '0.0'
+      }))
+      .sort((a, b) => b.spent - a.spent);
   };
 
-  // Calculate member monthly contributions (expenses per member for current month)
-  const getMemberMonthlyContributions = () => {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
+  const memberMonthlyContributions = buildMemberContribution(currentMonthSharedExpenses, currentMonthIncome, monthlySharedExpenses);
+  const memberAllTimeContributions = buildMemberContribution(allTimeSharedExpenses, incomeThroughCurrentMonth, totalSharedExpenses);
 
-    const contributions = {};
-    members.forEach(member => {
-      contributions[member.userId] = {
-        id: member.userId,
-        name: member.name,
-        spent: 0,
-        earned: 0,
-        balance: 0,
-        spendPercentage: 0
-      };
+  const memberPersonalTotals = members.map((member) => {
+    const memberExpenses = allTimePersonalExpenses.filter((expense) => expense.createdBy === member.userId);
+    return {
+      id: member.userId,
+      name: member.name,
+      personalTotal: sumAmount(memberExpenses),
+      count: memberExpenses.length
+    };
+  }).filter((member) => member.personalTotal > 0).sort((a, b) => b.personalTotal - a.personalTotal);
+
+  const monthOptions = (() => {
+    const keys = new Set([currentMonthKey]);
+    [...allTimeSharedExpenses, ...incomeThroughCurrentMonth].forEach((item) => {
+      const key = getMonthKey(item.date);
+      if (key) keys.add(key);
     });
+    return Array.from(keys).sort((a, b) => b.localeCompare(a));
+  })();
 
-    // Add shared expenses for this month, including generated recurring occurrences
-    currentMonthSharedExpenses.forEach(exp => {
-      if (contributions[exp.createdBy]) {
-        contributions[exp.createdBy].spent += exp.amount || 0;
-      }
-    });
+  const getCategoryRows = () => {
+    const rows = categoryFilterMonth === 'all'
+      ? allTimeSharedExpenses
+      : categoryFilterMonth === 'current'
+        ? currentMonthSharedExpenses
+        : allTimeSharedExpenses.filter((expense) => getMonthKey(expense.date) === categoryFilterMonth);
 
-    // Add income for this month
-    income.forEach(inc => {
-      if (inc.date && contributions[inc.userId]) {
-        const incDate = new Date(inc.date);
-        if (incDate.getMonth() === currentMonth && incDate.getFullYear() === currentYear) {
-          contributions[inc.userId].earned += inc.amount || 0;
-        }
-      }
-    });
-
-    // Calculate balance and percentage
-    const sortedBySpending = Object.values(contributions).sort((a, b) => b.spent - a.spent);
-    sortedBySpending.forEach(member => {
-      member.balance = member.earned - member.spent;
-      member.spendPercentage = monthlyFamilyExpenses > 0 ? ((member.spent / monthlyFamilyExpenses) * 100).toFixed(1) : 0;
-    });
-
-    return sortedBySpending;
-  };
-
-  const getMemberPersonalTotals = () => {
-    const personalTotals = {};
-    members.forEach(member => {
-      personalTotals[member.userId] = {
-        id: member.userId,
-        name: member.name,
-        personalTotal: 0,
-        count: 0,
-        percentage: 0
-      };
-    });
-
-    // Add personal expenses
-    (personalExpenses || []).forEach(exp => {
-      if (personalTotals[exp.createdBy]) {
-        personalTotals[exp.createdBy].personalTotal += exp.amount || 0;
-        personalTotals[exp.createdBy].count += 1;
-      }
-    });
-
-    // Calculate percentage
-    const totalPersonal = Object.values(personalTotals).reduce((sum, member) => sum + member.personalTotal, 0);
-    const sortedByPersonal = Object.values(personalTotals)
-      .filter(member => member.personalTotal > 0)
-      .sort((a, b) => b.personalTotal - a.personalTotal);
-    
-    sortedByPersonal.forEach(member => {
-      member.percentage = totalPersonal > 0 ? ((member.personalTotal / totalPersonal) * 100).toFixed(1) : 0;
-    });
-
-    return sortedByPersonal;
-  };
-
-  // Get category breakdown
-  const getCategoryBreakdown = (monthFilter = 'current') => {
     const categories = {};
-
-    const expensesForBreakdown = monthFilter === 'current' ? currentMonthSharedExpenses : sharedExpenses;
-
-    expensesForBreakdown.forEach(exp => {
-      const cat = exp.category || 'Other';
-      let includeExpense = false;
-
-      if (monthFilter === 'current') {
-        includeExpense = true;
-      } else if (monthFilter === 'all-time') {
-        // All time
-        includeExpense = true;
-      } else {
-        // Specific month across all years (for all-time view by month)
-        if (exp.date) {
-          const expDate = parseISODate(exp.date);
-          includeExpense = expDate && expDate.getMonth() === parseInt(monthFilter);
-        }
-      }
-
-      if (includeExpense) {
-        categories[cat] = (categories[cat] || 0) + (exp.amount || 0);
-      }
+    rows.forEach((expense) => {
+      const category = expense.category || 'Other';
+      categories[category] = (categories[category] || 0) + (parseFloat(expense.amount) || 0);
     });
-
-    const totalForChart = Object.values(categories).reduce((sum, val) => sum + val, 0);
-
+    const total = Object.values(categories).reduce((sum, amount) => sum + amount, 0);
     return Object.entries(categories)
       .map(([name, value]) => ({
         name,
         value,
-        percentage: totalForChart > 0 ? ((value / totalForChart) * 100).toFixed(1) : 0
+        percentage: total > 0 ? ((value / total) * 100).toFixed(1) : '0.0'
       }))
       .sort((a, b) => b.value - a.value);
   };
 
-  // Get member income sources breakdown
-  const getIncomeSourceBreakdown = () => {
-    const sources = {};
-    income.forEach(inc => {
-      const src = inc.source || 'Other';
-      sources[src] = (sources[src] || 0) + (inc.amount || 0);
-    });
-    return Object.entries(sources)
-      .map(([name, value]) => ({
-        name,
-        value,
-        percentage: totalFamilyIncome > 0 ? ((value / totalFamilyIncome) * 100).toFixed(1) : 0
-      }))
-      .sort((a, b) => b.value - a.value);
-  };
+  const categoryBreakdown = getCategoryRows();
 
-  // Get filtered transactions
-  // Get all family activity for the activity feed
-  const getAllFamilyActivity = () => {
-    let activity = [];
+  const selectedTransactionRange = getMonthRange(transactionFilterMonth);
+  const transactionIncome = incomeList.filter((item) => {
+    const date = parseISODate(item.date);
+    return date && date >= selectedTransactionRange.startDate && date <= selectedTransactionRange.endDate;
+  });
+  const transactionSharedExpenses = expandExpensesForRange(sharedExpenses, selectedTransactionRange.startDate, selectedTransactionRange.endDate);
 
-    // Add all shared expenses
-    sharedExpenses.forEach(exp => {
-      activity.push({
-        id: `exp-${exp.id}`,
-        type: 'expense',
-        category: exp.category,
-        amount: exp.amount,
-        memberName: members.find(m => m.userId === exp.createdBy)?.name || 'Unknown',
-        date: exp.date,
-        description: exp.description,
-        userId: exp.createdBy
-      });
-    });
+  const recentTransactions = [
+    ...transactionSharedExpenses.map((expense) => ({
+      ...expense,
+      transactionType: isInvestmentExpense(expense) ? 'investment' : 'expense',
+      memberName: getMemberName(expense.createdBy),
+      title: expense.description || expense.category || 'Expense'
+    })),
+    ...transactionIncome.map((item) => ({
+      ...item,
+      transactionType: 'income',
+      memberName: getMemberName(item.userId),
+      title: item.source || 'Income'
+    }))
+  ]
+    .filter((item) => transactionType === 'all' || item.transactionType === transactionType)
+    .sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0));
 
-    // Add all income
-    income.forEach(inc => {
-      activity.push({
-        id: `inc-${inc.id}`,
-        type: 'income',
-        source: inc.source,
-        amount: inc.amount,
-        memberName: members.find(m => m.userId === inc.userId)?.name || 'Unknown',
-        date: inc.date,
-        description: inc.description,
-        userId: inc.userId
-      });
-    });
+  const incomeByMember = members.map((member) => {
+    const total = sumAmount(incomeThroughCurrentMonth.filter((item) => item.userId === member.userId));
+    return { name: member.name, total };
+  }).filter((item) => item.total > 0).sort((a, b) => b.total - a.total);
 
-    // Sort by date (newest first)
-    return activity.sort((a, b) => new Date(b.date) - new Date(a.date));
-  };
+  const spendingComparison = memberAllTimeContributions.map((member) => ({
+    name: member.name,
+    spending: member.spent,
+    percentage: totalSharedExpenses > 0 ? ((member.spent / totalSharedExpenses) * 100).toFixed(1) : '0.0'
+  }));
 
-  // Get activity summary by date
-  const getActivityByDate = () => {
-    const allActivity = getAllFamilyActivity();
-    const grouped = {};
+  const topSpender = memberAllTimeContributions[0] || { name: 'N/A', spent: 0 };
+  const spendRate = monthlyFamilyIncome > 0 ? ((monthlySharedExpenses / monthlyFamilyIncome) * 100).toFixed(1) : '0.0';
+  const investmentRate = monthlyFamilyIncome > 0 ? ((monthlyInvestmentTotal / monthlyFamilyIncome) * 100).toFixed(1) : '0.0';
+  const investmentTarget = monthlyFamilyIncome * 0.4;
+  const investmentGap = monthlyInvestmentTotal - investmentTarget;
 
-    allActivity.forEach(activity => {
-      const dateStr = new Date(activity.date).toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-
-      if (!grouped[dateStr]) {
-        grouped[dateStr] = [];
-      }
-      grouped[dateStr].push(activity);
-    });
-
-    // Return as array of {date, activities}
-    return Object.entries(grouped).map(([date, activities]) => ({
-      date,
-      activities
-    }));
-  };
-
-  const getFilteredTransactions = () => {
-    let transactions = [];
-
-    if (filterType === 'all' || filterType === 'expenses') {
-      transactions.push(...sharedExpenses.map(exp => ({
-        ...exp,
-        type: 'expense',
-        memberName: members.find(m => m.userId === exp.createdBy)?.name || 'Unknown'
-      })));
-    }
-
-    if (filterType === 'all' || filterType === 'income') {
-      transactions.push(...income.map(inc => ({
-        ...inc,
-        type: 'income',
-        memberName: members.find(m => m.userId === inc.userId)?.name || 'Unknown'
-      })));
-    }
-
-    return transactions.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
-  };
-
-  // Get top spender
-  const getTopSpender = () => {
-    const topSpenders = [];
-    sharedExpenses.forEach(exp => {
-      const creatorName = members.find(m => m.userId === exp.createdBy)?.name || 'Unknown';
-      const category = exp.category || 'Other';
-      topSpenders.push({
-        name: creatorName,
-        category,
-        amount: exp.amount || 0,
-        id: exp.createdBy
-      });
-    });
-
-    const topSpender = topSpenders.sort((a, b) => b.amount - a.amount)[0];
-    return topSpender || { amount: 0, name: 'N/A' };
-  };
-
-  // Get most used category
-  const getMostUsedCategory = () => {
-    const categories = {};
-    sharedExpenses.forEach(exp => {
-      const cat = exp.category || 'Other';
-      categories[cat] = (categories[cat] || 0) + 1;
-    });
-
-    const sorted = Object.entries(categories).sort((a, b) => b[1] - a[1]);
-    return sorted.length > 0 ? { category: sorted[0][0], count: sorted[0][1] } : { category: 'N/A', count: 0 };
-  };
-
-  // Calculate average spending per member
-  const getAverageSpendingPerMember = () => {
-    if (members.length === 0) return 0;
-    return (totalFamilyExpenses / members.length).toFixed(2);
-  };
-
-  // Identify unusual spending patterns
-  const getUnusualPatterns = () => {
-    const memberStats = {};
-    
-    // Calculate stats for each member
-    sharedExpenses.forEach(exp => {
-      if (!memberStats[exp.createdBy]) {
-        memberStats[exp.createdBy] = {
-          name: members.find(m => m.userId === exp.createdBy)?.name || 'Unknown',
-          total: 0,
-          count: 0,
-          amounts: []
-        };
-      }
-      memberStats[exp.createdBy].total += exp.amount || 0;
-      memberStats[exp.createdBy].count += 1;
-      memberStats[exp.createdBy].amounts.push(exp.amount || 0);
-    });
-
-    // Calculate average and identify unusual patterns
-    const patterns = [];
-    Object.entries(memberStats).forEach(([userId, stats]) => {
-      if (stats.count === 0) return;
-      
-      const avg = stats.total / stats.count;
-      const avgFamilyExpense = totalFamilyExpenses / sharedExpenses.length;
-      
-      // Identify patterns
-      if (avg > avgFamilyExpense * 1.5) {
-        patterns.push({
-          type: 'highSpender',
-          member: stats.name,
-          avgExpense: avg,
-          message: `${stats.name} has notably higher average transaction amounts`
-        });
-      }
-      
-      // Check for recent spike
-      const last3 = stats.amounts.slice(-3);
-      if (last3.length > 0) {
-        const last3Avg = last3.reduce((a, b) => a + b, 0) / last3.length;
-        if (last3Avg > avg * 1.3) {
-          patterns.push({
-            type: 'spendingSpike',
-            member: stats.name,
-            recentAvg: last3Avg,
-            message: `${stats.name} has recent spending increase`
-          });
-        }
-      }
-    });
-
-    return patterns.slice(0, 3); // Return top 3 patterns
-  };
-
-  // Get spending comparison data
-  const getSpendingComparison = () => {
-    const comparison = members.map(member => {
-      const memberSpending = sharedExpenses
-        .filter(exp => exp.createdBy === member.userId)
-        .reduce((sum, exp) => sum + (exp.amount || 0), 0);
-      
-      return {
-        name: member.name,
-        spending: parseFloat(memberSpending.toFixed(2)),
-        percentage: totalSharedExpenses > 0 ? ((memberSpending / totalSharedExpenses) * 100).toFixed(1) : 0
-      };
-    }).sort((a, b) => b.spending - a.spending);
-
-    return comparison;
-  };
-
-  // Calculate expense settlements (who owes whom)
-  const calculateSettlements = () => {
-    const balances = {}; // userId -> balance (positive = owed to them, negative = they owe)
-    
-    // Initialize balances
-    members.forEach(member => {
-      balances[member.userId] = 0;
-    });
-
-    // Process split expenses
-    sharedExpenses.forEach(exp => {
-      if (exp.isSplit && exp.splitMembers && exp.splitMembers.length > 0) {
-        const payer = exp.createdBy;
-        const splitCount = exp.splitMembers.length + 1; // Includes payer
-        const amountPerPerson = (exp.amount / splitCount).toFixed(2);
-
-        // Payer paid the full amount
-        balances[payer] = (parseFloat(balances[payer]) + parseFloat(exp.amount)).toFixed(2);
-
-        // Each splitter owes their share
-        exp.splitMembers.forEach(memberUserId => {
-          balances[memberUserId] = (parseFloat(balances[memberUserId]) - parseFloat(amountPerPerson)).toFixed(2);
-        });
-
-        // Payer owes their share back to themselves (net out)
-        balances[payer] = (parseFloat(balances[payer]) - parseFloat(amountPerPerson)).toFixed(2);
-      }
-    });
-
-    // Generate settlement list
-    const settlements = [];
-    const memberIds = Object.keys(balances);
-    
-    for (let i = 0; i < memberIds.length; i++) {
-      for (let j = i + 1; j < memberIds.length; j++) {
-        const debtor = memberIds[i];
-        const creditor = memberIds[j];
-        const debtorBalance = parseFloat(balances[debtor]);
-        const creditorBalance = parseFloat(balances[creditor]);
-
-        let amount = 0;
-        let payer = '';
-        let payee = '';
-
-        if (debtorBalance < 0 && creditorBalance > 0) {
-          amount = Math.min(Math.abs(debtorBalance), creditorBalance);
-          payer = debtor;
-          payee = creditor;
-        } else if (debtorBalance > 0 && creditorBalance < 0) {
-          amount = Math.min(debtorBalance, Math.abs(creditorBalance));
-          payer = creditor;
-          payee = debtor;
-        }
-
-        if (amount > 0.01) {
-          settlements.push({
-            payer: members.find(m => m.userId === payer)?.name || 'Unknown',
-            payee: members.find(m => m.userId === payee)?.name || 'Unknown',
-            amount: parseFloat(amount.toFixed(2)),
-            payerId: payer,
-            payeeId: payee
-          });
-        }
-      }
-    }
-
-    return settlements;
-  };
-
-  const memberContributions = getMemberContributions();
-  const memberMonthlyContributions = getMemberMonthlyContributions();
-  const memberPersonalTotals = getMemberPersonalTotals();
-  const categoryBreakdown = getCategoryBreakdown(categoryFilterMonth);
-  const incomeSourceBreakdown = getIncomeSourceBreakdown();
-  const recentTransactions = getFilteredTransactions();
-  const topSpender = getTopSpender();
-  const mostUsedCategory = getMostUsedCategory();
-  const averageSpendingPerMember = getAverageSpendingPerMember();
-  const unusualPatterns = getUnusualPatterns();
-  const spendingComparison = getSpendingComparison();
-  const settlements = calculateSettlements();
-
-  const COLORS = ['#5bb450', '#4a9940', '#3a8330', '#2a7320', '#1a6310', '#0a5300'];
+  const renderContributionRows = (rows) => (
+    <div className="table-wrapper">
+      {rows.map((member, idx) => (
+        <div key={member.id} className="contribution-row">
+          <div className="row-member">
+            <div className="member-avatar" style={{ backgroundColor: COLORS[idx % COLORS.length] }}>
+              {member.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="member-info">
+              <div className="member-name">{member.name}</div>
+              <div className="member-stats">
+                <span className="stat-income">Income {formatCurrency(member.earned)}</span>
+                <span className="stat-expense">Shared {formatCurrency(member.spent)}</span>
+              </div>
+            </div>
+          </div>
+          <div className="member-contribution-details">
+            <div className="spend-percentage">
+              <div className="percentage-bar">
+                <div className="percentage-fill" style={{ width: `${Math.min(parseFloat(member.spendPercentage), 100)}%` }}></div>
+              </div>
+              <span className="percentage-label">{member.spendPercentage}%</span>
+            </div>
+            <div className={`member-balance ${member.balance >= 0 ? 'positive' : 'negative'}`}>
+              {formatCurrency(member.balance)}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div className={`family-dashboard ${darkMode ? 'dark-mode' : ''}`}>
-      {/* Header */}
-      <div className="family-dashboard-header">
-        <div className="family-header-content">
-          <h1 className="family-dashboard-title">👨‍👩‍👧‍👦 {userGroup.name} Dashboard</h1>
-          <p className="family-dashboard-subtitle">Family Financial Summary</p>
-        </div>
+      <AppHeader
+        darkMode={darkMode}
+        setDarkMode={setDarkMode}
+        user={user}
+        onLogout={onLogout}
+        onSignIn={onSignIn}
+        userGroup={userGroup}
+        onOpenFamilyGroup={onOpenFamilyGroup}
+        onSwitchToPersonal={onSwitchToPersonal}
+      />
 
-        <div className="family-dashboard-controls">
-          <button
-            className="dark-mode-toggle"
-            onClick={() => setDarkMode(!darkMode)}
-            title={darkMode ? 'Light mode' : 'Dark mode'}
-          >
-            {darkMode ? '☀️' : '🌙'}
-          </button>
-          <button
-            className="back-to-personal-btn"
-            onClick={onSwitchToPersonal}
-            title="Back to personal dashboard"
-          >
-            ← Personal Mode
-          </button>
+      <div className="family-dashboard-title-row">
+        <div>
+          <h1 className="family-dashboard-title">{userGroup.name} Dashboard</h1>
+          <p className="family-dashboard-subtitle">Shared family income, expenses, investments, and policies</p>
         </div>
       </div>
 
-      {/* Privacy Notice */}
-      {userGroup && (
-        <div className="family-privacy-notice">
-          <span>ℹ️</span>
-          <p>This dashboard shows only <strong>shared expenses</strong>. Personal expenses are kept private and visible only to you.</p>
-        </div>
-      )}
-
-      {/* Summary Cards */}
       <div className="family-summary-section">
-        <div className="summary-card income-card">
-          <div className="card-icon">💰</div>
+        <button className="summary-card income-card clickable-summary-card" onClick={() => setIncomeDrawerOpen(true)}>
           <div className="card-content">
             <h3 className="card-title">Total Family Income</h3>
             <div className="card-amount">{formatCurrency(totalFamilyIncome)}</div>
-            <p className="card-detail">{income.length} entries</p>
+            <p className="card-detail">{incomeThroughCurrentMonth.length} income entries</p>
           </div>
-        </div>
+        </button>
 
         <div className="summary-card income-card">
-          <div className="card-icon">📅</div>
           <div className="card-content">
             <h3 className="card-title">Monthly Income</h3>
             <div className="card-amount">{formatCurrency(monthlyFamilyIncome)}</div>
-            <p className="card-detail">This month • Balance: {formatCurrency(monthlyBalance)}</p>
+            <p className="card-detail">Balance after shared expenses: {formatCurrency(monthlyBalance)}</p>
           </div>
         </div>
 
         <div className="summary-card expense-card">
-          <div className="card-icon">💸</div>
           <div className="card-content">
             <h3 className="card-title">Total Shared Expenses</h3>
             <div className="card-amount">{formatCurrency(totalSharedExpenses)}</div>
-            <p className="card-detail">{sharedExpenses.length} shared entries</p>
+            <p className="card-detail">{allTimeSharedExpenses.length} shared entries incl. investments</p>
           </div>
         </div>
 
-        <div className={`summary-card balance-card ${familyBalance >= 0 ? 'positive' : 'negative'}`}>
-          <div className="card-icon">{familyBalance >= 0 ? '✓' : '⚠'}</div>
+        <div className={`summary-card balance-card ${totalFamilyBalance >= 0 ? 'positive' : 'negative'}`}>
           <div className="card-content">
-            <h3 className="card-title">Family Balance</h3>
-            <div className="card-amount">{formatCurrency(familyBalance)}</div>
-            <p className="card-detail">{familyBalance >= 0 ? 'Surplus' : 'Deficit'}</p>
+            <h3 className="card-title">Total Family Balance</h3>
+            <div className="card-amount">{formatCurrency(totalFamilyBalance)}</div>
+            <p className="card-detail">Income minus shared expenses</p>
           </div>
         </div>
       </div>
 
-      {/* Main Content Grid */}
       <div className="family-main-grid">
-        {/* Member Contributions */}
         <div className="family-card member-contributions-card">
-          <h2 className="card-heading">👥 Member Contributions</h2>
-          <div className="contributions-table">
-            {memberContributions.length > 0 ? (
-              <>
-                {/* Current Month Contributions */}
-                <div className="contributions-section">
-                  <h3 className="contributions-section-title">📅 This Month</h3>
-                  <div className="table-wrapper">
-                    {memberMonthlyContributions.map((member, idx) => (
-                      <div
-                        key={`monthly-${member.id}`}
-                        className={`contribution-row ${selectedMember === `monthly-${member.id}` ? 'active' : ''}`}
-                        onClick={() => setSelectedMember(selectedMember === `monthly-${member.id}` ? null : `monthly-${member.id}`)}
-                      >
-                        <div className="row-member">
-                          <div className="member-avatar" style={{ backgroundColor: COLORS[idx % COLORS.length] }}>
-                            {member.name.charAt(0).toUpperCase()}
-                          </div>
-                          <div className="member-info">
-                            <div className="member-name">{member.name}</div>
-                            <div className="member-stats">
-                              <span className="stat-income">📈 {formatCurrency(member.earned)}</span>
-                              <span className="stat-expense">📉 {formatCurrency(member.spent)}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="member-contribution-details">
-                          <div className="spend-percentage">
-                            <div className="percentage-bar">
-                              <div 
-                                className="percentage-fill"
-                                style={{ width: `${member.spendPercentage}%` }}
-                              ></div>
-                            </div>
-                            <span className="percentage-label">{member.spendPercentage}%</span>
-                          </div>
-                          <div className={`member-balance ${member.balance >= 0 ? 'positive' : 'negative'}`}>
-                            {formatCurrency(member.balance)}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Total Contributions */}
-                <div className="contributions-section">
-                  <h3 className="contributions-section-title">📊 Total (All Time)</h3>
-                  <div className="table-wrapper">
-                    {memberContributions.map((member, idx) => (
-                      <div
-                        key={`total-${member.id}`}
-                        className={`contribution-row ${selectedMember === `total-${member.id}` ? 'active' : ''}`}
-                        onClick={() => setSelectedMember(selectedMember === `total-${member.id}` ? null : `total-${member.id}`)}
-                      >
-                        <div className="row-member">
-                          <div className="member-avatar" style={{ backgroundColor: COLORS[idx % COLORS.length] }}>
-                            {member.name.charAt(0).toUpperCase()}
-                          </div>
-                          <div className="member-info">
-                            <div className="member-name">{member.name}</div>
-                            <div className="member-stats">
-                              <span className="stat-income">📈 {formatCurrency(member.earned)}</span>
-                              <span className="stat-expense">📉 {formatCurrency(member.spent)}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="member-contribution-details">
-                          <div className="spend-percentage">
-                            <div className="percentage-bar">
-                              <div 
-                                className="percentage-fill"
-                                style={{ width: `${member.spendPercentage}%` }}
-                              ></div>
-                            </div>
-                            <span className="percentage-label">{member.spendPercentage}%</span>
-                          </div>
-                          <div className={`member-balance ${member.balance >= 0 ? 'positive' : 'negative'}`}>
-                            {formatCurrency(member.balance)}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <p className="no-data">No member data available</p>
-            )}
-          </div>
+          <h2 className="card-heading">Member Contribution - Current Month</h2>
+          {renderContributionRows(memberMonthlyContributions)}
         </div>
 
-        {/* Personal Expense Summary */}
-        {memberPersonalTotals.length > 0 && (
-          <div className="family-card personal-expense-summary-card">
-            <h2 className="card-heading">💳 Personal Expense Summary</h2>
-            <div className="personal-totals-container">
-              {memberPersonalTotals.map((member, idx) => (
-                <div key={member.id} className="personal-total-card">
-                  <div className="member-avatar-small" style={{ backgroundColor: COLORS[idx % COLORS.length] }}>
-                    {member.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="personal-details">
-                    <div className="member-name-small">{member.name}</div>
-                    <div className="personal-amount">{formatCurrency(member.personalTotal)}</div>
-                    <div className="personal-percentage">{member.count} expense{member.count !== 1 ? 's' : ''}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="personal-summary-footer">
-              <div className="total-personal">
-                <span>Total Personal Expenses:</span>
-                <span className="total-amount">{formatCurrency(totalPersonalExpenses)}</span>
-              </div>
-            </div>
-          </div>
-        )}
+        <div className="family-card member-contributions-card">
+          <h2 className="card-heading">Member Contribution - All Time</h2>
+          {renderContributionRows(memberAllTimeContributions)}
+        </div>
 
-        {/* Category Breakdown */}
-        {categoryBreakdown.length > 0 && (
-          <div className="family-card category-breakdown-card">
-            <div className="chart-header">
-              <h2 className="card-heading">📊 Expense Categories</h2>
-              <select
-                className="category-month-filter"
-                value={categoryFilterMonth}
-                onChange={(e) => setCategoryFilterMonth(e.target.value)}
-                title="Filter expenses by month"
-              >
-                <option value="current">Current Month</option>
-                <option value="all-time">All Time</option>
-                <optgroup label="Specific Month (All Years)">
-                  <option value="0">January</option>
-                  <option value="1">February</option>
-                  <option value="2">March</option>
-                  <option value="3">April</option>
-                  <option value="4">May</option>
-                  <option value="5">June</option>
-                  <option value="6">July</option>
-                  <option value="7">August</option>
-                  <option value="8">September</option>
-                  <option value="9">October</option>
-                  <option value="10">November</option>
-                  <option value="11">December</option>
-                </optgroup>
-              </select>
-            </div>
+        <div className="family-card personal-expense-summary-card">
+          <h2 className="card-heading">Personal Expense Summary</h2>
+          {memberPersonalTotals.length > 0 ? (
+            <>
+              <div className="personal-totals-container">
+                {memberPersonalTotals.map((member, idx) => (
+                  <div key={member.id} className="personal-total-card">
+                    <div className="member-avatar-small" style={{ backgroundColor: COLORS[idx % COLORS.length] }}>
+                      {member.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="personal-details">
+                      <div className="member-name-small">{member.name}</div>
+                      <div className="personal-amount">{formatCurrency(member.personalTotal)}</div>
+                      <div className="personal-percentage">{member.count} expense{member.count !== 1 ? 's' : ''}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="personal-summary-footer">
+                <div className="total-personal">
+                  <span>Total Personal Expenses</span>
+                  <span className="total-amount">{formatCurrency(sumAmount(allTimePersonalExpenses))}</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="no-data">No personal expenses found</p>
+          )}
+        </div>
+
+        <div className="family-card category-breakdown-card">
+          <div className="chart-header">
+            <h2 className="card-heading">Shared Expense Categories</h2>
+            <select
+              className="category-month-filter"
+              value={categoryFilterMonth}
+              onChange={(event) => setCategoryFilterMonth(event.target.value)}
+            >
+              <option value="current">Current Month</option>
+              <option value="all">All Time</option>
+              {monthOptions.map((monthKey) => (
+                <option key={monthKey} value={monthKey}>{getMonthLabel(monthKey)}</option>
+              ))}
+            </select>
+          </div>
+          {categoryBreakdown.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -867,89 +470,60 @@ function FamilyDashboard({
                   cy="50%"
                   labelLine={false}
                   label={({ name, percentage }) => `${name} (${percentage}%)`}
-                  outerRadius={80}
-                  fill="#5bb450"
+                  outerRadius={82}
                   dataKey="value"
                 >
                   {categoryBreakdown.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip formatter={(value) => formatCurrency(value)} />
               </PieChart>
             </ResponsiveContainer>
-          </div>
-        )}
-
-        {/* Income Source Breakdown */}
-        {incomeSourceBreakdown.length > 0 && (
-          <div className="family-card income-breakdown-card">
-            <h2 className="card-heading">💵 Income Sources</h2>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={incomeSourceBreakdown}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-                <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
-                <YAxis />
-                <Tooltip formatter={(value) => formatCurrency(value)} />
-                <Bar dataKey="value" fill="#5bb450" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
+          ) : (
+            <p className="no-data">No shared expense categories for this period</p>
+          )}
+        </div>
       </div>
 
-      {/* Family Insights */}
       <div className="family-insights-section">
-        <h2 className="insights-title">💡 Family Insights</h2>
-        
-        {/* Key Metrics */}
+        <h2 className="insights-title">Family Insights</h2>
         <div className="insights-grid">
           <div className="insight-card metric-card">
-            <div className="insight-icon">🎯</div>
-            <div className="insight-content">
-              <h3 className="insight-label">Top Spender</h3>
-              <p className="insight-value">{topSpender.name}</p>
-              <p className="insight-detail">{formatCurrency(topSpender.amount)}</p>
-            </div>
+            <h3 className="insight-label">Monthly Spend Rate</h3>
+            <p className="insight-value">{spendRate}%</p>
+            <p className="insight-detail">{formatCurrency(monthlySharedExpenses)} of {formatCurrency(monthlyFamilyIncome)}</p>
           </div>
-
           <div className="insight-card metric-card">
-            <div className="insight-icon">🏷️</div>
-            <div className="insight-content">
-              <h3 className="insight-label">Most Used Category</h3>
-              <p className="insight-value">{mostUsedCategory.category}</p>
-              <p className="insight-detail">{mostUsedCategory.count} transaction{mostUsedCategory.count !== 1 ? 's' : ''}</p>
-            </div>
+            <h3 className="insight-label">Monthly Investment</h3>
+            <p className="insight-value">{formatCurrency(monthlyInvestmentTotal)}</p>
+            <p className="insight-detail">{investmentRate}% of monthly income • All time {formatCurrency(allTimeInvestmentTotal)}</p>
           </div>
-
           <div className="insight-card metric-card">
-            <div className="insight-icon">📊</div>
-            <div className="insight-content">
-              <h3 className="insight-label">Avg per Member</h3>
-              <p className="insight-value">{formatCurrency(averageSpendingPerMember)}</p>
-              <p className="insight-detail">{members.length} members</p>
-            </div>
+            <h3 className="insight-label">40% Investment Target</h3>
+            <p className={`insight-value ${investmentGap >= 0 ? 'positive' : 'negative'}`}>
+              {investmentGap >= 0 ? '+' : ''}{formatCurrency(investmentGap)}
+            </p>
+            <p className="insight-detail">Target: {formatCurrency(investmentTarget)}</p>
+          </div>
+          <div className="insight-card metric-card">
+            <h3 className="insight-label">Top Contributor</h3>
+            <p className="insight-value">{topSpender.name}</p>
+            <p className="insight-detail">{formatCurrency(topSpender.spent)} shared spend</p>
           </div>
         </div>
 
-        {/* Spending Comparison */}
         <div className="insight-card spending-comparison-card">
-          <h3 className="insight-card-title">📈 Spending Comparison</h3>
+          <h3 className="insight-card-title">Shared Spend Comparison</h3>
           <div className="comparison-list">
-            {spendingComparison.map((item, idx) => (
-              <div key={idx} className="comparison-item">
+            {spendingComparison.map((item) => (
+              <div key={item.name} className="comparison-item">
                 <div className="comparison-member">
                   <span className="comparison-name">{item.name}</span>
                   <span className="comparison-amount">{formatCurrency(item.spending)}</span>
                 </div>
                 <div className="comparison-bar-container">
-                  <div
-                    className="comparison-bar"
-                    style={{
-                      width: `${item.percentage}%`,
-                      backgroundColor: `hsl(${120 - (item.percentage / 2)}, 70%, 50%)`
-                    }}
-                  ></div>
+                  <div className="comparison-bar" style={{ width: `${Math.min(parseFloat(item.percentage), 100)}%` }}></div>
                 </div>
                 <span className="comparison-percentage">{item.percentage}%</span>
               </div>
@@ -957,202 +531,112 @@ function FamilyDashboard({
           </div>
         </div>
 
-        {/* Unusual Patterns */}
-        {unusualPatterns.length > 0 && (
-          <div className="insight-card patterns-card">
-            <h3 className="insight-card-title">⚠️ Notable Patterns</h3>
-            <div className="patterns-list">
-              {unusualPatterns.map((pattern, idx) => (
-                <div key={idx} className={`pattern-item pattern-${pattern.type}`}>
-                  <span className="pattern-icon">
-                    {pattern.type === 'highSpender' ? '💰' : '📈'}
-                  </span>
-                  <div className="pattern-content">
-                    <p className="pattern-message">{pattern.message}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="insight-card income-breakdown-card">
+          <h3 className="insight-card-title">Income By Member</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={incomeByMember}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip formatter={(value) => formatCurrency(value)} />
+              <Bar dataKey="total" fill="#1976d2" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
-      {/* Recent Transactions */}
       <div className="family-card recent-transactions-card">
         <div className="transactions-header">
-          <h2 className="card-heading">📝 Recent Transactions</h2>
-          <div className="filter-buttons">
-            <button
-              className={`filter-btn ${filterType === 'all' ? 'active' : ''}`}
-              onClick={() => setFilterType('all')}
+          <h2 className="card-heading">Recent Transactions</h2>
+          <div className="family-transaction-controls">
+            <select
+              className="category-month-filter"
+              value={transactionFilterMonth}
+              onChange={(event) => setTransactionFilterMonth(event.target.value)}
             >
-              All
-            </button>
-            <button
-              className={`filter-btn ${filterType === 'expenses' ? 'active' : ''}`}
-              onClick={() => setFilterType('expenses')}
-            >
-              Expenses
-            </button>
-            <button
-              className={`filter-btn ${filterType === 'income' ? 'active' : ''}`}
-              onClick={() => setFilterType('income')}
-            >
-              Income
-            </button>
+              {monthOptions.map((monthKey) => (
+                <option key={monthKey} value={monthKey}>{getMonthLabel(monthKey)}</option>
+              ))}
+            </select>
+            <div className="filter-buttons">
+              {['all', 'expense', 'investment', 'income'].map((type) => (
+                <button
+                  key={type}
+                  className={`filter-btn ${transactionType === type ? 'active' : ''}`}
+                  onClick={() => setTransactionType(type)}
+                >
+                  {type === 'all' ? 'All' : type === 'expense' ? 'Expenses' : type === 'investment' ? 'Investment' : 'Income'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         {recentTransactions.length > 0 ? (
           <div className="transactions-list">
-            {recentTransactions.map((transaction, idx) => (
-              <div key={idx} className={`transaction-item ${transaction.type}`}>
-                <div className="transaction-icon">
-                  {transaction.type === 'expense' ? '💸' : '💰'}
-                </div>
+            {recentTransactions.map((transaction) => (
+              <div key={`${transaction.transactionType}-${transaction.id}`} className={`transaction-item ${transaction.transactionType}`}>
                 <div className="transaction-content">
                   <div className="transaction-header">
-                    <div className="transaction-title">
-                      {transaction.memberName && transaction.type === 'expense' 
-                        ? `${transaction.memberName} spent ₹${transaction.amount.toFixed(2)} on ${transaction.category || 'Transaction'}`
-                        : transaction.category || transaction.source || 'Transaction'
-                      }
-                    </div>
-                    <div className={`transaction-amount ${transaction.type}`}>
-                      {transaction.type === 'expense' ? '-' : '+'}
-                      {formatCurrency(transaction.amount)}
+                    <div className="transaction-title">{transaction.title}</div>
+                    <div className={`transaction-amount ${transaction.transactionType}`}>
+                      {transaction.transactionType === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
                     </div>
                   </div>
                   <div className="transaction-footer">
                     <span className="transaction-member">{transaction.memberName}</span>
                     <span className="transaction-date">{formatDate(transaction.date)}</span>
                   </div>
-                  {transaction.description && (
-                    <p className="transaction-description">{transaction.description}</p>
-                  )}
+                  {transaction.description && <p className="transaction-description">{transaction.description}</p>}
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <p className="no-data">No transactions found</p>
+          <p className="no-data">No transactions found for this period</p>
         )}
       </div>
 
-      {/* Settlement Summary */}
-      {settlements.length > 0 && (
-        <div className="family-card settlement-card">
-          <h2 className="card-heading">💳 Settlement Summary</h2>
-          <p className="feed-subtitle">Who owes whom for split expenses</p>
-          
-          <div className="settlement-list">
-            {settlements.map((settlement, idx) => (
-              <div key={idx} className="settlement-item">
-                <div className="settlement-arrow">
-                  <span className="settlement-payer">{settlement.payer}</span>
-                  <div className="arrow-container">
-                    <span className="arrow">→</span>
-                  </div>
-                  <span className="settlement-payee">{settlement.payee}</span>
-                </div>
-                <div className="settlement-amount">{formatCurrency(settlement.amount)}</div>
-              </div>
-            ))}
-          </div>
-
-          {settlements.length > 0 && (
-            <div className="settlement-note">
-              <p>✓ Mark payments as complete in your transaction history</p>
+      {incomeDrawerOpen && (
+        <>
+          <div className="family-drawer-overlay" onClick={() => setIncomeDrawerOpen(false)}></div>
+          <aside className="family-income-drawer">
+            <div className="drawer-header">
+              <h3 className="drawer-title">Family Income Details</h3>
+              <button className="drawer-close-btn" onClick={() => setIncomeDrawerOpen(false)}>×</button>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Family Activity Feed */}
-      <div className="family-card activity-feed-card">
-        <h2 className="card-heading">📋 Family Activity Feed</h2>
-        <p className="feed-subtitle">All recent transactions from family members</p>
-        
-        {getAllFamilyActivity().length > 0 ? (
-          <div className="activity-feed">
-            {getActivityByDate().map((group, groupIdx) => (
-              <div key={groupIdx} className="activity-date-group">
-                <div className="activity-date-header">
-                  <h3 className="activity-date">{group.date}</h3>
-                  <span className="activity-count">{group.activities.length} transaction{group.activities.length !== 1 ? 's' : ''}</span>
-                </div>
-                
-                <div className="activity-items">
-                  {group.activities.map((activity, idx) => (
-                    <div key={activity.id} className={`activity-item ${activity.type}`}>
-                      <div className="activity-timeline-dot"></div>
-                      
-                      <div className="activity-icon">
-                        {activity.type === 'expense' ? '💸' : '💰'}
-                      </div>
-                      
-                      <div className="activity-content">
-                        <div className="activity-header">
-                          <div className="activity-title">
-                            <span className="activity-member">{activity.memberName}</span>
-                            <span className="activity-category">
-                              {activity.type === 'expense' ? activity.category : activity.source}
-                            </span>
-                          </div>
-                          <div className={`activity-amount ${activity.type}`}>
-                            {activity.type === 'expense' ? '−' : '+'}
-                            {formatCurrency(activity.amount)}
-                          </div>
+            <div className="drawer-content">
+              <div className="drawer-summary">
+                <strong>{formatCurrency(totalFamilyIncome)}</strong>
+                <span>Total income through {getMonthLabel(currentMonthKey)}</span>
+              </div>
+              <div className="transactions-list">
+                {incomeThroughCurrentMonth
+                  .slice()
+                  .sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0))
+                  .map((item) => (
+                    <div key={item.id} className="transaction-item income">
+                      <div className="transaction-content">
+                        <div className="transaction-header">
+                          <div className="transaction-title">{item.source || 'Income'}</div>
+                          <div className="transaction-amount income">+{formatCurrency(item.amount)}</div>
                         </div>
-                        
-                        {activity.description && (
-                          <p className="activity-description">{activity.description}</p>
-                        )}
-                        
-                        <div className="activity-time">
-                          {new Date(activity.date).toLocaleTimeString('en-US', {
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
+                        <div className="transaction-footer">
+                          <span className="transaction-member">{getMemberName(item.userId)}</span>
+                          <span className="transaction-date">{formatDate(item.date)}</span>
                         </div>
                       </div>
-                      
-                      {idx < group.activities.length - 1 && (
-                        <div className="activity-timeline-connector"></div>
-                      )}
                     </div>
                   ))}
-                </div>
               </div>
-            ))}
-          </div>
-        ) : (
-          <p className="no-data">No activity yet</p>
-        )}
-      </div>
+            </div>
+          </aside>
+        </>
+      )}
 
-      {/* Family Stats Footer */}
-      <div className="family-stats-footer">
-        <div className="stat-box">
-          <h4>Total Members</h4>
-          <p className="stat-value">{members.length}</p>
-        </div>
-        <div className="stat-box">
-          <h4>Admin</h4>
-          <p className="stat-value">{userGroup.adminName}</p>
-        </div>
-        <div className="stat-box">
-          <h4>Your Role</h4>
-          <p className="stat-value">
-            <span className={`role-badge ${userRole}`}>{userRole}</span>
-          </p>
-        </div>
-      </div>
-
-      {/* Admin Tools - Only visible to group admins */}
       <AdminTools
         currentUser={user}
-        members={userGroup.members || []}
+        members={members}
         groupId={userGroup.id}
         isAdmin={userRole === 'admin'}
       />

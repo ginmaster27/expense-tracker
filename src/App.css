@@ -4653,6 +4653,62 @@
   transition: background-color 0.3s, color 0.3s;
 }
 
+.family-dashboard .app-header {
+  margin-bottom: 16px;
+}
+
+.family-dashboard-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.clickable-summary-card {
+  width: 100%;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.family-transaction-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.transaction-item.investment {
+  border-left-color: #7b1fa2;
+}
+
+.transaction-amount.investment {
+  color: #7b1fa2;
+}
+
+.family-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.family-income-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 1001;
+  width: min(440px, 100vw);
+  height: 100vh;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+  box-shadow: -12px 0 30px rgba(0, 0, 0, 0.2);
+  animation: slideInRight 0.25s ease;
+}
+
 .family-dashboard.loading {
   display: flex;
   align-items: center;
