@@ -1,6 +1,26 @@
 import { useState, useEffect } from 'react';
 
 function SIPForm({ editingId, existingSIP, onSubmit, onCancel, isSubmitting, darkMode }) {
+  const getUpcomingMonthSameDate = (dateString) => {
+    if (!dateString) return '';
+
+    const [, , day] = dateString.split('-').map(Number);
+    if (!day) return '';
+
+    const today = new Date();
+    const nextMonth = today.getMonth() + 1;
+    const nextYear = today.getFullYear() + Math.floor(nextMonth / 12);
+    const normalizedNextMonth = nextMonth % 12;
+    const lastDayOfUpcomingMonth = new Date(nextYear, normalizedNextMonth + 1, 0).getDate();
+    const nextDate = new Date(nextYear, normalizedNextMonth, Math.min(day, lastDayOfUpcomingMonth));
+
+    const nextYearValue = nextDate.getFullYear();
+    const nextMonthValue = String(nextDate.getMonth() + 1).padStart(2, '0');
+    const nextDayValue = String(nextDate.getDate()).padStart(2, '0');
+
+    return `${nextYearValue}-${nextMonthValue}-${nextDayValue}`;
+  };
+
   const [formData, setFormData] = useState({
     sipType: 'Stock',
     sipName: '',
@@ -15,6 +35,7 @@ function SIPForm({ editingId, existingSIP, onSubmit, onCancel, isSubmitting, dar
   });
 
   const [errors, setErrors] = useState({});
+  const [renewalDateOverridden, setRenewalDateOverridden] = useState(false);
 
   useEffect(() => {
     if (existingSIP) {
@@ -30,6 +51,9 @@ function SIPForm({ editingId, existingSIP, onSubmit, onCancel, isSubmitting, dar
         whoPaid: existingSIP.whoPaid || '',
         notes: existingSIP.notes || '',
       });
+      setRenewalDateOverridden(Boolean(existingSIP.renewalDate));
+    } else {
+      setRenewalDateOverridden(false);
     }
   }, [existingSIP]);
 
@@ -47,10 +71,26 @@ function SIPForm({ editingId, existingSIP, onSubmit, onCancel, isSubmitting, dar
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData((prev) => {
+      const next = {
+        ...prev,
+        [name]: value,
+      };
+
+      if (name === 'renewalDate') {
+        setRenewalDateOverridden(true);
+      }
+
+      if (name === 'startDate' && next.frequency === 'Monthly' && !renewalDateOverridden) {
+        next.renewalDate = getUpcomingMonthSameDate(value);
+      }
+
+      if (name === 'frequency' && value === 'Monthly' && next.startDate && !renewalDateOverridden) {
+        next.renewalDate = getUpcomingMonthSameDate(next.startDate);
+      }
+
+      return next;
+    });
     if (errors[name]) {
       setErrors((prev) => ({
         ...prev,

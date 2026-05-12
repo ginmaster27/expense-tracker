@@ -948,16 +948,45 @@
 
 .sip-card-details {
   flex: 1;
+  min-width: 0;
+}
+
+.sip-card-title-row {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .sip-card-name {
-  margin: 0 0 12px 0;
+  margin: 0;
   font-size: 1.1rem;
   font-weight: 700;
   color: #2196F3;
+  overflow-wrap: anywhere;
 }
 
 .investments-module.dark-mode .sip-card-name {
+  color: #64b5f6;
+}
+
+.sip-type-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background-color: #e3f2fd;
+  color: #1976D2;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.investments-module.dark-mode .sip-type-badge {
+  background-color: #1e3a5f;
   color: #64b5f6;
 }
 

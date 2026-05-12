@@ -920,13 +920,17 @@ function App() {
 
     sips.forEach((sip) => {
       const frequency = (sip.frequency || 'Monthly').trim().toLowerCase();
+      const isMonthly = frequency.includes('month') || frequency === 'monthy';
+      const isYearly = frequency.includes('year');
       const isOneTime = frequency === 'one-time' || frequency === 'one time' || frequency === 'onetime';
-      if (frequency !== 'monthly' && frequency !== 'yearly' && !isOneTime) {
+      if (!isMonthly && !isYearly && !isOneTime) {
         return;
       }
 
-      const recurrenceStart = parseISODate(sip.renewalDate || sip.startDate);
-      if (!recurrenceStart) {
+      const sipStartDate = parseISODate(sip.startDate);
+      const renewalDate = parseISODate(sip.renewalDate);
+      const firstKnownDate = sipStartDate || renewalDate;
+      if (!firstKnownDate) {
         return;
       }
 
@@ -934,44 +938,81 @@ function App() {
       const stopDate = getSIPStopDate(sip);
       const effectiveEndDate = [explicitEndDate, stopDate].filter(Boolean).sort((a, b) => a - b)[0] || null;
 
-      if (recurrenceStart > endDate || (effectiveEndDate && effectiveEndDate < startDate)) {
+      if (firstKnownDate > endDate || (effectiveEndDate && effectiveEndDate < startDate)) {
         return;
       }
 
-      let currentDate = new Date(recurrenceStart);
-      while (currentDate <= endDate) {
-        if (currentDate >= startDate && (!effectiveEndDate || currentDate <= effectiveEndDate)) {
-          const dateStr = formatDateToISO(currentDate);
-          generatedExpenses.push({
-            id: `sip-${sip.id}-${dateStr}`,
-            amount: parseFloat(sip.amount) || 0,
-            category: 'Investments',
-            date: dateStr,
-            description: `SIP: ${sip.sipName}`,
-            type: 'personal',
-            source: 'sip',
-            sourceId: sip.id,
-            isGenerated: true,
-            isSIPExpense: true,
-            isRecurring: true,
-            frequency: frequency,
-            createdBy: user?.uid
-          });
+      const addSIPExpense = (expenseDate, idSuffix, generatedFrequency, isRecurringExpense) => {
+        if (!expenseDate || expenseDate < startDate || expenseDate > endDate || (effectiveEndDate && expenseDate > effectiveEndDate)) {
+          return;
         }
 
-        if (isOneTime) {
-          break;
+        const dateStr = formatDateToISO(expenseDate);
+        generatedExpenses.push({
+          id: `sip-${sip.id}-${idSuffix || dateStr}`,
+          amount: parseFloat(sip.amount) || 0,
+          category: 'Investments',
+          date: dateStr,
+          description: `SIP: ${sip.sipName}`,
+          type: 'personal',
+          source: 'sip',
+          sourceId: sip.id,
+          isGenerated: true,
+          isSIPExpense: true,
+          isRecurring: isRecurringExpense,
+          frequency: generatedFrequency,
+          createdBy: user?.uid
+        });
+      };
+
+      if (isOneTime) {
+        addSIPExpense(firstKnownDate, `one-time-${formatDateToISO(firstKnownDate)}`, 'one-time', false);
+        return;
+      }
+
+      if (sipStartDate) {
+        addSIPExpense(sipStartDate, `start-${formatDateToISO(sipStartDate)}`, 'one-time', false);
+      }
+
+      if (isMonthly) {
+        const anchorDate = renewalDate || sipStartDate;
+        const recurrenceDay = anchorDate.getDate();
+        const firstMonth = new Date(firstKnownDate.getFullYear(), firstKnownDate.getMonth(), 1);
+        const rangeStartMonth = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+        let currentMonth = firstMonth > rangeStartMonth ? firstMonth : rangeStartMonth;
+
+        while (currentMonth <= endDate) {
+          const lastDayOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate();
+          const occurrenceDate = new Date(
+            currentMonth.getFullYear(),
+            currentMonth.getMonth(),
+            Math.min(recurrenceDay, lastDayOfMonth)
+          );
+
+          const isAfterInitialPayment = sipStartDate ? occurrenceDate > sipStartDate : occurrenceDate >= firstKnownDate;
+          if (isAfterInitialPayment) {
+            addSIPExpense(occurrenceDate, formatDateToISO(occurrenceDate), 'monthly', true);
+          }
+
+          currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
         }
 
-        if (frequency === 'yearly') {
-          currentDate.setFullYear(currentDate.getFullYear() + 1);
-        } else {
-          const recurrenceDay = recurrenceStart.getDate();
-          const nextMonth = currentDate.getMonth() + 1;
-          const nextYear = currentDate.getFullYear() + Math.floor(nextMonth / 12);
-          const normalizedNextMonth = nextMonth % 12;
-          const lastDayOfMonth = new Date(nextYear, normalizedNextMonth + 1, 0).getDate();
-          currentDate = new Date(nextYear, normalizedNextMonth, Math.min(recurrenceDay, lastDayOfMonth));
+        return;
+      }
+
+      if (isYearly) {
+        const anchorDate = renewalDate || sipStartDate;
+        const recurrenceMonth = anchorDate.getMonth();
+        const recurrenceDay = anchorDate.getDate();
+        const firstYear = Math.max(firstKnownDate.getFullYear(), startDate.getFullYear());
+
+        for (let year = firstYear; year <= endDate.getFullYear(); year += 1) {
+          const lastDayOfMonth = new Date(year, recurrenceMonth + 1, 0).getDate();
+          const occurrenceDate = new Date(year, recurrenceMonth, Math.min(recurrenceDay, lastDayOfMonth));
+          const isAfterInitialPayment = sipStartDate ? occurrenceDate > sipStartDate : occurrenceDate >= firstKnownDate;
+          if (isAfterInitialPayment) {
+            addSIPExpense(occurrenceDate, formatDateToISO(occurrenceDate), 'yearly', true);
+          }
         }
       }
     });

@@ -3,6 +3,38 @@ import { useState } from 'react';
 function SIPList({ sips, topUps, onEdit, onDelete, onAddTopUp, onDeleteTopUp, loading, darkMode }) {
   const [selectedSIP, setSelectedSIP] = useState(null);
 
+  const getUpcomingMonthSameDate = (dateString) => {
+    if (!dateString) return '';
+
+    const [, , day] = dateString.split('-').map(Number);
+    if (!day) return '';
+
+    const today = new Date();
+    const nextMonth = today.getMonth() + 1;
+    const nextYear = today.getFullYear() + Math.floor(nextMonth / 12);
+    const normalizedNextMonth = nextMonth % 12;
+    const lastDayOfUpcomingMonth = new Date(nextYear, normalizedNextMonth + 1, 0).getDate();
+    const nextDate = new Date(nextYear, normalizedNextMonth, Math.min(day, lastDayOfUpcomingMonth));
+
+    return [
+      nextDate.getFullYear(),
+      String(nextDate.getMonth() + 1).padStart(2, '0'),
+      String(nextDate.getDate()).padStart(2, '0')
+    ].join('-');
+  };
+
+  const getDisplayRenewalDate = (sip) => {
+    if (sip.renewalDate) return sip.renewalDate;
+    if ((sip.frequency || 'Monthly') === 'Monthly') return getUpcomingMonthSameDate(sip.startDate);
+    return sip.startDate || '-';
+  };
+
+  const sortedSIPs = [...sips].sort((a, b) => {
+    const dateA = new Date(getDisplayRenewalDate(a));
+    const dateB = new Date(getDisplayRenewalDate(b));
+    return dateA - dateB;
+  });
+
   const calculateTotalInvested = (sip) => {
     // Parse dates - handle both string (YYYY-MM-DD) and Date objects
     const parseDate = (dateInput) => {
@@ -72,7 +104,7 @@ function SIPList({ sips, topUps, onEdit, onDelete, onAddTopUp, onDeleteTopUp, lo
     <div className="sip-list-container">
       {/* SIP Cards List */}
       <div className="sip-cards-list">
-        {sips.map((sip) => {
+        {sortedSIPs.map((sip) => {
           const isSelected = selectedSIP && selectedSIP.id === sip.id;
 
           return (
@@ -84,12 +116,15 @@ function SIPList({ sips, topUps, onEdit, onDelete, onAddTopUp, onDeleteTopUp, lo
               <div className="sip-card-content">
                 {/* SIP Details Section */}
                 <div className="sip-card-details">
-                  <h3 className="sip-card-name">{sip.sipName}</h3>
+                  <div className="sip-card-title-row">
+                    <h3 className="sip-card-name">{sip.sipName}</h3>
+                    <span className="sip-type-badge">{sip.sipType || 'Stock'}</span>
+                  </div>
                   <div className="sip-card-amount-frequency">
                     ₹{sip.amount.toFixed(2)} • {sip.frequency}
                   </div>
                   <div className="sip-card-start-date">
-                    📅 {sip.renewalDate || sip.startDate}
+                    📅 {getDisplayRenewalDate(sip)}
                     <span className={`status-badge ${getStatusClass(sip.status)}`}>
                       {sip.status || 'Active'}
                     </span>
@@ -174,7 +209,7 @@ function SIPList({ sips, topUps, onEdit, onDelete, onAddTopUp, onDeleteTopUp, lo
 
               <div className="detail-row">
                 <label>Renewal Date:</label>
-                <span className="detail-value">{selectedSIP.renewalDate || selectedSIP.startDate}</span>
+                <span className="detail-value">{getDisplayRenewalDate(selectedSIP)}</span>
               </div>
 
               <div className="detail-row">
