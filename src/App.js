@@ -9,6 +9,7 @@ import {
   familyGroupsAPI,
   usersAPI,
   sipsAPI,
+  sipTopUpsAPI,
   insurancePoliciesAPI,
   vehicleInsurancePoliciesAPI,
   vehiclePollutionRecordsAPI
@@ -60,6 +61,11 @@ function App() {
   const [insurancePolicies, setInsurancePolicies] = useState([]);
   const [vehicleInsurancePolicies, setVehicleInsurancePolicies] = useState([]);
   const [pollutionRecords, setPollutionRecords] = useState([]);
+  const [familySips, setFamilySips] = useState([]);
+  const [familySipTopUps, setFamilySipTopUps] = useState([]);
+  const [familyInsurancePolicies, setFamilyInsurancePolicies] = useState([]);
+  const [familyVehicleInsurancePolicies, setFamilyVehicleInsurancePolicies] = useState([]);
+  const [familyPollutionRecords, setFamilyPollutionRecords] = useState([]);
   const [familyIncome, setFamilyIncome] = useState([]);
   const [incomeAmount, setIncomeAmount] = useState('');
   
@@ -915,10 +921,10 @@ function App() {
     return parseISODate(sip.statusDate, true) || parseISODate(formatDateToISO(new Date()), true);
   };
 
-  const getGeneratedSIPExpenseInstancesForDateRange = (startDate, endDate) => {
+  const getGeneratedSIPExpenseInstancesForDateRange = (startDate, endDate, sipItems = sips) => {
     const generatedExpenses = [];
 
-    sips.forEach((sip) => {
+    sipItems.forEach((sip) => {
       const frequency = (sip.frequency || 'Monthly').trim().toLowerCase();
       const isMonthly = frequency.includes('month') || frequency === 'monthy';
       const isYearly = frequency.includes('year');
@@ -961,7 +967,7 @@ function App() {
           isSIPExpense: true,
           isRecurring: isRecurringExpense,
           frequency: generatedFrequency,
-          createdBy: user?.uid
+          createdBy: sip.createdBy || user?.uid
         });
       };
 
@@ -1020,8 +1026,13 @@ function App() {
     return generatedExpenses;
   };
 
-  const getGeneratedInvestmentExpenseInstancesForDateRange = (startDate, endDate) => {
+  const getGeneratedInvestmentExpenseInstancesForDateRange = (startDate, endDate, investmentItems = {}) => {
     const generatedExpenses = [];
+    const {
+      insurancePolicyItems = insurancePolicies,
+      vehicleInsurancePolicyItems = vehicleInsurancePolicies,
+      pollutionRecordItems = pollutionRecords
+    } = investmentItems;
 
     const addRecurringPolicyExpenses = ({
       items,
@@ -1072,7 +1083,7 @@ function App() {
               isPolicyExpense: true,
               isRecurring: !isOneTime,
               frequency,
-              createdBy: user?.uid
+              createdBy: item.createdBy || user?.uid
             });
           }
 
@@ -1095,7 +1106,7 @@ function App() {
     };
 
     addRecurringPolicyExpenses({
-      items: insurancePolicies,
+      items: insurancePolicyItems,
       source: 'insurance',
       category: 'Insurance',
       nameField: 'policyName',
@@ -1107,7 +1118,7 @@ function App() {
     });
 
     addRecurringPolicyExpenses({
-      items: vehicleInsurancePolicies,
+      items: vehicleInsurancePolicyItems,
       source: 'vehicle-insurance',
       category: 'Vehicle',
       nameField: 'vehicleNumber',
@@ -1117,7 +1128,7 @@ function App() {
     });
 
     addRecurringPolicyExpenses({
-      items: pollutionRecords,
+      items: pollutionRecordItems,
       source: 'pollution',
       category: 'Vehicle',
       nameField: 'vehicleNumber',
@@ -2311,14 +2322,14 @@ function App() {
     }
   };
 
-  // Load family income when userGroup changes
+  // Load family income/expenses when the group changes or the family dashboard is opened.
   useEffect(() => {
     if (userGroup && user) {
       loadFamilyIncome();
       loadFamilySharedExpenses();
     }
     // eslint-disable-next-line
-  }, [userGroup?.id, user?.uid]);
+  }, [userGroup?.id, user?.uid, viewingFamilyDashboard]);
 
   // Sign in with Google
   const handleSignInWithGoogle = async () => {
@@ -2373,6 +2384,12 @@ function App() {
       setUserRole(null);
       setFamilyIncome([]);
       setFamilySharedExpenses([]);
+      setFamilyPersonalExpenses([]);
+      setFamilySips([]);
+      setFamilySipTopUps([]);
+      setFamilyInsurancePolicies([]);
+      setFamilyVehicleInsurancePolicies([]);
+      setFamilyPollutionRecords([]);
       setSips([]);
       setInsurancePolicies([]);
       setVehicleInsurancePolicies([]);
@@ -2422,18 +2439,61 @@ function App() {
     if (!userGroup || !userGroup.members) {
       setFamilySharedExpenses([]);
       setFamilyPersonalExpenses([]);
+      setFamilySips([]);
+      setFamilySipTopUps([]);
+      setFamilyInsurancePolicies([]);
+      setFamilyVehicleInsurancePolicies([]);
+      setFamilyPollutionRecords([]);
       return;
     }
 
     try {
       // Use new API to fetch both shared and personal expenses across the group
-      const familyExpenses = await expensesAPI.getAllFamilyExpenses(userGroup.members, userGroup.id);
+      const [familyExpenses, familyInvestmentResults] = await Promise.all([
+        expensesAPI.getAllFamilyExpenses(userGroup.members, userGroup.id),
+        Promise.all(userGroup.members.map(async (member) => {
+          const [memberSips, memberTopUps, memberInsurancePolicies, memberVehiclePolicies, memberPollutionRecords] = await Promise.all([
+            sipsAPI.getSIPs(member.userId),
+            sipTopUpsAPI.getTopUps(member.userId),
+            insurancePoliciesAPI.getPolicies(member.userId),
+            vehicleInsurancePoliciesAPI.getVehiclePolicies(member.userId),
+            vehiclePollutionRecordsAPI.getRecords(member.userId)
+          ]);
+
+          const withMember = (items) => items.map((item) => ({
+            ...item,
+            id: `${member.userId}-${item.id}`,
+            sourceId: item.id,
+            createdBy: member.userId,
+            memberName: member.name
+          }));
+
+          return {
+            sips: withMember(memberSips),
+            sipTopUps: withMember(memberTopUps),
+            insurancePolicies: withMember(memberInsurancePolicies),
+            vehicleInsurancePolicies: withMember(memberVehiclePolicies),
+            pollutionRecords: withMember(memberPollutionRecords)
+          };
+        }))
+      ]);
+
       setFamilySharedExpenses(familyExpenses.shared);
       setFamilyPersonalExpenses(familyExpenses.personal);
+      setFamilySips(familyInvestmentResults.flatMap((result) => result.sips));
+      setFamilySipTopUps(familyInvestmentResults.flatMap((result) => result.sipTopUps));
+      setFamilyInsurancePolicies(familyInvestmentResults.flatMap((result) => result.insurancePolicies));
+      setFamilyVehicleInsurancePolicies(familyInvestmentResults.flatMap((result) => result.vehicleInsurancePolicies));
+      setFamilyPollutionRecords(familyInvestmentResults.flatMap((result) => result.pollutionRecords));
     } catch (error) {
       console.error('Error loading family expenses:', error);
       setFamilySharedExpenses([]);
       setFamilyPersonalExpenses([]);
+      setFamilySips([]);
+      setFamilySipTopUps([]);
+      setFamilyInsurancePolicies([]);
+      setFamilyVehicleInsurancePolicies([]);
+      setFamilyPollutionRecords([]);
     }
   };
 
@@ -2537,10 +2597,34 @@ function App() {
   const getFamilyDashboardSharedExpenses = () => {
     const now = new Date();
     const startDate = new Date(0);
-    const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const endDate = new Date(now.getFullYear() + 1, now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const generatedTopUpExpenses = familySipTopUps
+      .filter((topUp) => {
+        const topUpDate = parseISODate(topUp.date);
+        return topUpDate && topUpDate >= startDate && topUpDate <= endDate;
+      })
+      .map((topUp) => ({
+        id: `family-sip-topup-${topUp.id}`,
+        amount: parseFloat(topUp.topUpAmount) || 0,
+        category: 'Investments',
+        date: topUp.date,
+        description: `SIP top-up${topUp.sipName ? `: ${topUp.sipName}` : ''}`,
+        type: 'shared',
+        source: 'sip-topup',
+        sourceId: topUp.sourceId || topUp.id,
+        isGenerated: true,
+        isSIPExpense: true,
+        isRecurring: false,
+        createdBy: topUp.createdBy || user?.uid
+      }));
     const generatedInvestmentExpenses = [
-      ...getGeneratedSIPExpenseInstancesForDateRange(startDate, endDate),
-      ...getGeneratedInvestmentExpenseInstancesForDateRange(startDate, endDate)
+      ...getGeneratedSIPExpenseInstancesForDateRange(startDate, endDate, familySips),
+      ...getGeneratedInvestmentExpenseInstancesForDateRange(startDate, endDate, {
+        insurancePolicyItems: familyInsurancePolicies,
+        vehicleInsurancePolicyItems: familyVehicleInsurancePolicies,
+        pollutionRecordItems: familyPollutionRecords
+      }),
+      ...generatedTopUpExpenses
     ].map((expense) => ({
       ...expense,
       id: `family-${expense.id}`,

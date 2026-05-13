@@ -4841,6 +4841,10 @@
   border-left-color: #FF9800;
 }
 
+.investment-card {
+  border-left-color: #7b1fa2;
+}
+
 .balance-card {
   border-left-color: #2196F3;
 }
@@ -4851,6 +4855,30 @@
 
 .balance-card.negative {
   border-left-color: #f44336;
+}
+
+.family-all-time-summary {
+  align-items: stretch;
+}
+
+.summary-metric-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.summary-metric-row + .summary-metric-row {
+  border-top: 1px solid var(--border-color);
+}
+
+.summary-metric-row strong {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  white-space: nowrap;
 }
 
 .card-icon {
@@ -4904,6 +4932,46 @@
 
 .family-card:hover {
   box-shadow: 0 12px 50px rgba(0, 0, 0, 0.1);
+}
+
+.collapsible-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.collapse-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-align: left;
+}
+
+.collapse-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background-color: var(--bg-tertiary);
+  color: var(--accent-primary);
+  font-size: 1.25rem;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+.collapse-arrow.expanded {
+  transform: rotate(90deg);
 }
 
 .card-heading {
@@ -5221,9 +5289,14 @@
 }
 
 /* Recent Transactions */
+.family-trend-card {
+  margin-bottom: 24px;
+}
+
 .recent-transactions-card {
   grid-column: span 1;
   max-width: 100%;
+  margin-bottom: 24px;
 }
 
 .transactions-header {
@@ -5260,6 +5333,50 @@
   background: linear-gradient(135deg, #5bb450 0%, #4a9940 100%);
   color: white;
   border-color: var(--accent-primary);
+}
+
+.transaction-summary-panel {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.transaction-summary-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+}
+
+.transaction-summary-label {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.transaction-summary-amount {
+  color: var(--text-primary);
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.transaction-summary-amount.expense,
+.transaction-summary-amount.investment {
+  color: #FF9800;
+}
+
+.transaction-summary-amount.income {
+  color: #4CAF50;
+}
+
+.transaction-summary-period {
+  margin: 4px 0 0 0;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
 }
 
 .transactions-list {
@@ -5416,6 +5533,10 @@
 /* Family Insights Section */
 .family-insights-section {
   margin-bottom: 30px;
+  background-color: var(--bg-secondary);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: var(--shadow);
 }
 
 .insights-title {
@@ -5428,64 +5549,82 @@
 /* Insights Grid */
 .insights-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
 }
 
 .insight-card {
-  background-color: var(--bg-secondary);
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: var(--shadow);
-  transition: all 0.3s;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .insight-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 50px rgba(0, 0, 0, 0.1);
+  border-color: var(--accent-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 .metric-card {
   display: flex;
-  align-items: center;
-  gap: 16px;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 128px;
 }
 
 .insight-icon {
-  font-size: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background-color: rgba(33, 150, 243, 0.12);
+  color: var(--accent-primary);
+  font-size: 0.95rem;
+  font-weight: 800;
 }
 
 .insight-content {
   flex: 1;
+  min-width: 0;
 }
 
 .insight-label {
-  font-size: 0.85rem;
+  font-size: 0.76rem;
   color: var(--text-secondary);
-  margin: 0 0 6px 0;
+  margin: 0 0 8px 0;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 600;
+  letter-spacing: 0;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
 .insight-value {
-  font-size: 1.3rem;
+  font-size: 1.25rem;
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .insight-detail {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   color: var(--text-muted);
-  margin: 4px 0 0 0;
+  margin: 8px 0 0 0;
+  line-height: 1.35;
 }
 
-/* Spending Comparison Card */
-.spending-comparison-card {
-  grid-column: span 1;
+.insights-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
 }
 
 .insight-card-title {
@@ -5498,29 +5637,34 @@
 .comparison-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .comparison-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
 }
 
 .comparison-member {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  grid-column: 1 / -1;
 }
 
 .comparison-name {
   font-weight: 600;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 
 .comparison-amount {
   font-weight: 700;
   color: var(--accent-primary);
+  white-space: nowrap;
 }
 
 .comparison-bar-container {
@@ -5542,6 +5686,8 @@
   font-size: 0.8rem;
   color: var(--text-secondary);
   font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
 }
 
 /* Patterns Card */
@@ -6027,13 +6173,22 @@
   }
 
   /* Insights Responsive */
+  .family-insights-section {
+    padding: 16px;
+  }
+
   .insights-grid {
     grid-template-columns: 1fr;
     gap: 12px;
   }
 
+  .insights-detail-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
   .metric-card {
-    justify-content: space-between;
+    min-height: 0;
   }
 
   .insight-card {
@@ -6041,7 +6196,9 @@
   }
 
   .insight-icon {
-    font-size: 1.5rem;
+    width: 34px;
+    height: 34px;
+    font-size: 0.9rem;
   }
 
   .insight-value {

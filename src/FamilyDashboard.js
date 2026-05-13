@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, Legend } from 'recharts';
 import AdminTools from './AdminTools';
 import AppHeader from './AppHeader';
 
@@ -26,6 +26,13 @@ function FamilyDashboard({
   });
   const [transactionType, setTransactionType] = useState('all');
   const [incomeDrawerOpen, setIncomeDrawerOpen] = useState(false);
+  const [trendYear, setTrendYear] = useState(String(new Date().getFullYear()));
+  const [expandedSections, setExpandedSections] = useState({
+    monthlyContribution: false,
+    allTimeContribution: false,
+    personalSummary: false,
+    categories: false
+  });
 
   const COLORS = ['#2e7d32', '#1976d2', '#f57c00', '#7b1fa2', '#00897b', '#c62828', '#455a64'];
 
@@ -197,6 +204,7 @@ function FamilyDashboard({
   const monthlyBalance = monthlyFamilyIncome - monthlySharedExpenses;
   const allTimeInvestmentTotal = sumAmount(allTimeSharedExpenses.filter(isInvestmentExpense));
   const monthlyInvestmentTotal = sumAmount(currentMonthSharedExpenses.filter(isInvestmentExpense));
+  const monthlySharedExpenseExcludingInvestment = monthlySharedExpenses - monthlyInvestmentTotal;
 
   const buildMemberContribution = (expenseRows, incomeRows, denominator) => {
     const contributionMap = {};
@@ -247,7 +255,7 @@ function FamilyDashboard({
 
   const monthOptions = (() => {
     const keys = new Set([currentMonthKey]);
-    [...allTimeSharedExpenses, ...incomeThroughCurrentMonth].forEach((item) => {
+    [...sharedExpenses, ...allTimeSharedExpenses, ...incomeThroughCurrentMonth].forEach((item) => {
       const key = getMonthKey(item.date);
       if (key) keys.add(key);
     });
@@ -285,7 +293,7 @@ function FamilyDashboard({
   });
   const transactionSharedExpenses = expandExpensesForRange(sharedExpenses, selectedTransactionRange.startDate, selectedTransactionRange.endDate);
 
-  const recentTransactions = [
+  const allMonthTransactions = [
     ...transactionSharedExpenses.map((expense) => ({
       ...expense,
       transactionType: isInvestmentExpense(expense) ? 'investment' : 'expense',
@@ -298,9 +306,25 @@ function FamilyDashboard({
       memberName: getMemberName(item.userId),
       title: item.source || 'Income'
     }))
-  ]
+  ];
+  const recentTransactions = allMonthTransactions
     .filter((item) => transactionType === 'all' || item.transactionType === transactionType)
     .sort((a, b) => (parseISODate(b.date) || 0) - (parseISODate(a.date) || 0));
+  const transactionSummary = {
+    expense: sumAmount(allMonthTransactions.filter((item) => item.transactionType === 'expense')),
+    investment: sumAmount(allMonthTransactions.filter((item) => item.transactionType === 'investment')),
+    income: sumAmount(allMonthTransactions.filter((item) => item.transactionType === 'income'))
+  };
+  transactionSummary.all = transactionSummary.expense + transactionSummary.investment;
+  const transactionBalanceLeft = transactionSummary.income - transactionSummary.all;
+  const activeTransactionTotal = transactionSummary[transactionType] || 0;
+  const activeTransactionLabel = transactionType === 'all'
+    ? 'All'
+    : transactionType === 'expense'
+      ? 'Expenses'
+      : transactionType === 'investment'
+        ? 'Investment'
+        : 'Income';
 
   const incomeByMember = members.map((member) => {
     const total = sumAmount(incomeThroughCurrentMonth.filter((item) => item.userId === member.userId));
@@ -312,6 +336,27 @@ function FamilyDashboard({
     spending: member.spent,
     percentage: totalSharedExpenses > 0 ? ((member.spent / totalSharedExpenses) * 100).toFixed(1) : '0.0'
   }));
+  const yearOptions = (() => {
+    const years = new Set([String(new Date().getFullYear())]);
+    sharedExpenses.forEach((expense) => {
+      const date = parseISODate(expense.date);
+      if (date) years.add(String(date.getFullYear()));
+    });
+    return Array.from(years).sort((a, b) => b.localeCompare(a));
+  })();
+  const monthlyTrendData = Array.from({ length: 12 }, (_, monthIndex) => {
+    const monthStart = new Date(parseInt(trendYear), monthIndex, 1);
+    const monthEnd = new Date(parseInt(trendYear), monthIndex + 1, 0, 23, 59, 59, 999);
+    const monthExpenses = expandExpensesForRange(sharedExpenses, monthStart, monthEnd);
+    const investmentTotal = sumAmount(monthExpenses.filter(isInvestmentExpense));
+    const expenseTotal = sumAmount(monthExpenses.filter((expense) => !isInvestmentExpense(expense)));
+
+    return {
+      month: monthStart.toLocaleDateString('en-IN', { month: 'short' }),
+      expense: expenseTotal,
+      investment: investmentTotal
+    };
+  });
 
   const topSpender = memberAllTimeContributions[0] || { name: 'N/A', spent: 0 };
   const spendRate = monthlyFamilyIncome > 0 ? ((monthlySharedExpenses / monthlyFamilyIncome) * 100).toFixed(1) : '0.0';
@@ -351,6 +396,28 @@ function FamilyDashboard({
     </div>
   );
 
+  const toggleSection = (section) => {
+    setExpandedSections((prev) => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
+
+  const renderCollapseHeader = (section, title, extraContent = null) => (
+    <div className="collapsible-card-header">
+      <button
+        type="button"
+        className="collapse-toggle-btn"
+        onClick={() => toggleSection(section)}
+        aria-expanded={expandedSections[section]}
+      >
+        <span className={`collapse-arrow ${expandedSections[section] ? 'expanded' : ''}`}>›</span>
+        <span>{title}</span>
+      </button>
+      {extraContent}
+    </div>
+  );
+
   return (
     <div className={`family-dashboard ${darkMode ? 'dark-mode' : ''}`}>
       <AppHeader
@@ -374,51 +441,61 @@ function FamilyDashboard({
       <div className="family-summary-section">
         <button className="summary-card income-card clickable-summary-card" onClick={() => setIncomeDrawerOpen(true)}>
           <div className="card-content">
-            <h3 className="card-title">Total Family Income</h3>
-            <div className="card-amount">{formatCurrency(totalFamilyIncome)}</div>
-            <p className="card-detail">{incomeThroughCurrentMonth.length} income entries</p>
+            <h3 className="card-title">Monthly Income</h3>
+            <div className="card-amount">{formatCurrency(monthlyFamilyIncome)}</div>
+            <p className="card-detail">{currentMonthIncome.length} income entries • Balance: {formatCurrency(monthlyBalance)}</p>
           </div>
         </button>
 
-        <div className="summary-card income-card">
-          <div className="card-content">
-            <h3 className="card-title">Monthly Income</h3>
-            <div className="card-amount">{formatCurrency(monthlyFamilyIncome)}</div>
-            <p className="card-detail">Balance after shared expenses: {formatCurrency(monthlyBalance)}</p>
-          </div>
-        </div>
-
         <div className="summary-card expense-card">
           <div className="card-content">
-            <h3 className="card-title">Total Shared Expenses</h3>
-            <div className="card-amount">{formatCurrency(totalSharedExpenses)}</div>
-            <p className="card-detail">{allTimeSharedExpenses.length} shared entries incl. investments</p>
+            <h3 className="card-title">Monthly Shared Expense</h3>
+            <div className="card-amount">{formatCurrency(monthlySharedExpenseExcludingInvestment)}</div>
+            <p className="card-detail">Excludes investments</p>
           </div>
         </div>
 
-        <div className={`summary-card balance-card ${totalFamilyBalance >= 0 ? 'positive' : 'negative'}`}>
+        <div className="summary-card investment-card">
           <div className="card-content">
-            <h3 className="card-title">Total Family Balance</h3>
-            <div className="card-amount">{formatCurrency(totalFamilyBalance)}</div>
-            <p className="card-detail">Income minus shared expenses</p>
+            <h3 className="card-title">Monthly Shared Investment</h3>
+            <div className="card-amount">{formatCurrency(monthlyInvestmentTotal)}</div>
+            <p className="card-detail">SIPs and investments</p>
+          </div>
+        </div>
+
+        <div className={`summary-card balance-card family-all-time-summary ${totalFamilyBalance >= 0 ? 'positive' : 'negative'}`}>
+          <div className="card-content">
+            <h3 className="card-title">All Time Summary</h3>
+            <div className="summary-metric-row">
+              <span>Income</span>
+              <strong>{formatCurrency(totalFamilyIncome)}</strong>
+            </div>
+            <div className="summary-metric-row">
+              <span>Balance</span>
+              <strong>{formatCurrency(totalFamilyBalance)}</strong>
+            </div>
+            <div className="summary-metric-row">
+              <span>Investment</span>
+              <strong>{formatCurrency(allTimeInvestmentTotal)}</strong>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="family-main-grid">
         <div className="family-card member-contributions-card">
-          <h2 className="card-heading">Member Contribution - Current Month</h2>
-          {renderContributionRows(memberMonthlyContributions)}
+          {renderCollapseHeader('monthlyContribution', 'Member Contribution - Current Month')}
+          {expandedSections.monthlyContribution && renderContributionRows(memberMonthlyContributions)}
         </div>
 
         <div className="family-card member-contributions-card">
-          <h2 className="card-heading">Member Contribution - All Time</h2>
-          {renderContributionRows(memberAllTimeContributions)}
+          {renderCollapseHeader('allTimeContribution', 'Member Contribution - All Time')}
+          {expandedSections.allTimeContribution && renderContributionRows(memberAllTimeContributions)}
         </div>
 
         <div className="family-card personal-expense-summary-card">
-          <h2 className="card-heading">Personal Expense Summary</h2>
-          {memberPersonalTotals.length > 0 ? (
+          {renderCollapseHeader('personalSummary', 'Personal Expense Summary')}
+          {expandedSections.personalSummary && (memberPersonalTotals.length > 0 ? (
             <>
               <div className="personal-totals-container">
                 {memberPersonalTotals.map((member, idx) => (
@@ -443,12 +520,11 @@ function FamilyDashboard({
             </>
           ) : (
             <p className="no-data">No personal expenses found</p>
-          )}
+          ))}
         </div>
 
         <div className="family-card category-breakdown-card">
-          <div className="chart-header">
-            <h2 className="card-heading">Shared Expense Categories</h2>
+          {renderCollapseHeader('categories', 'Shared Expense Categories', expandedSections.categories ? (
             <select
               className="category-month-filter"
               value={categoryFilterMonth}
@@ -460,8 +536,8 @@ function FamilyDashboard({
                 <option key={monthKey} value={monthKey}>{getMonthLabel(monthKey)}</option>
               ))}
             </select>
-          </div>
-          {categoryBreakdown.length > 0 ? (
+          ) : null)}
+          {expandedSections.categories && (categoryBreakdown.length > 0 ? (
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -482,7 +558,7 @@ function FamilyDashboard({
             </ResponsiveContainer>
           ) : (
             <p className="no-data">No shared expense categories for this period</p>
-          )}
+          ))}
         </div>
       </div>
 
@@ -490,59 +566,99 @@ function FamilyDashboard({
         <h2 className="insights-title">Family Insights</h2>
         <div className="insights-grid">
           <div className="insight-card metric-card">
-            <h3 className="insight-label">Monthly Spend Rate</h3>
-            <p className="insight-value">{spendRate}%</p>
-            <p className="insight-detail">{formatCurrency(monthlySharedExpenses)} of {formatCurrency(monthlyFamilyIncome)}</p>
+            <div className="insight-icon">%</div>
+            <div className="insight-content">
+              <h3 className="insight-label">Monthly Spend Rate</h3>
+              <p className="insight-value">{spendRate}%</p>
+              <p className="insight-detail">{formatCurrency(monthlySharedExpenses)} of {formatCurrency(monthlyFamilyIncome)}</p>
+            </div>
           </div>
           <div className="insight-card metric-card">
-            <h3 className="insight-label">Monthly Investment</h3>
-            <p className="insight-value">{formatCurrency(monthlyInvestmentTotal)}</p>
-            <p className="insight-detail">{investmentRate}% of monthly income • All time {formatCurrency(allTimeInvestmentTotal)}</p>
+            <div className="insight-icon">₹</div>
+            <div className="insight-content">
+              <h3 className="insight-label">Monthly Investment</h3>
+              <p className="insight-value">{formatCurrency(monthlyInvestmentTotal)}</p>
+              <p className="insight-detail">{investmentRate}% of monthly income • All time {formatCurrency(allTimeInvestmentTotal)}</p>
+            </div>
           </div>
           <div className="insight-card metric-card">
-            <h3 className="insight-label">40% Investment Target</h3>
-            <p className={`insight-value ${investmentGap >= 0 ? 'positive' : 'negative'}`}>
-              {investmentGap >= 0 ? '+' : ''}{formatCurrency(investmentGap)}
-            </p>
-            <p className="insight-detail">Target: {formatCurrency(investmentTarget)}</p>
+            <div className="insight-icon">40</div>
+            <div className="insight-content">
+              <h3 className="insight-label">40% Investment Target</h3>
+              <p className={`insight-value ${investmentGap >= 0 ? 'positive' : 'negative'}`}>
+                {investmentGap >= 0 ? '+' : ''}{formatCurrency(investmentGap)}
+              </p>
+              <p className="insight-detail">Target: {formatCurrency(investmentTarget)}</p>
+            </div>
           </div>
           <div className="insight-card metric-card">
-            <h3 className="insight-label">Top Contributor</h3>
-            <p className="insight-value">{topSpender.name}</p>
-            <p className="insight-detail">{formatCurrency(topSpender.spent)} shared spend</p>
+            <div className="insight-icon">#1</div>
+            <div className="insight-content">
+              <h3 className="insight-label">Top Contributor</h3>
+              <p className="insight-value">{topSpender.name}</p>
+              <p className="insight-detail">{formatCurrency(topSpender.spent)} shared spend</p>
+            </div>
           </div>
         </div>
 
-        <div className="insight-card spending-comparison-card">
-          <h3 className="insight-card-title">Shared Spend Comparison</h3>
-          <div className="comparison-list">
-            {spendingComparison.map((item) => (
-              <div key={item.name} className="comparison-item">
-                <div className="comparison-member">
-                  <span className="comparison-name">{item.name}</span>
-                  <span className="comparison-amount">{formatCurrency(item.spending)}</span>
+        <div className="insights-detail-grid">
+          <div className="insight-card spending-comparison-card">
+            <h3 className="insight-card-title">Shared Spend Comparison</h3>
+            <div className="comparison-list">
+              {spendingComparison.map((item) => (
+                <div key={item.name} className="comparison-item">
+                  <div className="comparison-member">
+                    <span className="comparison-name">{item.name}</span>
+                    <span className="comparison-amount">{formatCurrency(item.spending)}</span>
+                  </div>
+                  <div className="comparison-bar-container">
+                    <div className="comparison-bar" style={{ width: `${Math.min(parseFloat(item.percentage), 100)}%` }}></div>
+                  </div>
+                  <span className="comparison-percentage">{item.percentage}%</span>
                 </div>
-                <div className="comparison-bar-container">
-                  <div className="comparison-bar" style={{ width: `${Math.min(parseFloat(item.percentage), 100)}%` }}></div>
-                </div>
-                <span className="comparison-percentage">{item.percentage}%</span>
-              </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="insight-card income-breakdown-card">
+            <h3 className="insight-card-title">Income By Member</h3>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={incomeByMember}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip formatter={(value) => formatCurrency(value)} />
+                <Bar dataKey="total" fill="#1976d2" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
+      <div className="family-card family-trend-card">
+        <div className="chart-header">
+          <h2 className="card-heading">Monthly Expense & Investment Trend</h2>
+          <select
+            className="category-month-filter"
+            value={trendYear}
+            onChange={(event) => setTrendYear(event.target.value)}
+          >
+            {yearOptions.map((year) => (
+              <option key={year} value={year}>{year}</option>
             ))}
-          </div>
+          </select>
         </div>
-
-        <div className="insight-card income-breakdown-card">
-          <h3 className="insight-card-title">Income By Member</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={incomeByMember}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip formatter={(value) => formatCurrency(value)} />
-              <Bar dataKey="total" fill="#1976d2" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={monthlyTrendData}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="month" />
+            <YAxis />
+            <Tooltip formatter={(value) => formatCurrency(value)} />
+            <Legend />
+            <Line type="monotone" dataKey="expense" name="Expense" stroke="#FF9800" strokeWidth={3} dot={{ r: 3 }} />
+            <Line type="monotone" dataKey="investment" name="Investment" stroke="#7b1fa2" strokeWidth={3} dot={{ r: 3 }} />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
 
       <div className="family-card recent-transactions-card">
@@ -570,6 +686,21 @@ function FamilyDashboard({
               ))}
             </div>
           </div>
+        </div>
+
+        <div className="transaction-summary-panel">
+          <p className="transaction-summary-line">
+            <span className="transaction-summary-label">Total {activeTransactionLabel}:</span>
+            <strong className={`transaction-summary-amount ${transactionType}`}>
+              {transactionType === 'income' ? '+' : transactionType === 'all' ? '' : '-'}{formatCurrency(activeTransactionTotal)}
+            </strong>
+          </p>
+          <p className="transaction-summary-period">{getMonthLabel(transactionFilterMonth)}</p>
+          {transactionType === 'all' && (
+            <p className="transaction-summary-period">
+              Balance left: {formatCurrency(transactionBalanceLeft)}
+            </p>
+          )}
         </div>
 
         {recentTransactions.length > 0 ? (

@@ -4,15 +4,24 @@ function SIPForm({ editingId, existingSIP, onSubmit, onCancel, isSubmitting, dar
   const getUpcomingMonthSameDate = (dateString) => {
     if (!dateString) return '';
 
-    const [, , day] = dateString.split('-').map(Number);
-    if (!day) return '';
+    const [startYear, startMonth, day] = dateString.split('-').map(Number);
+    if (!startYear || !startMonth || !day) return '';
 
     const today = new Date();
     const nextMonth = today.getMonth() + 1;
     const nextYear = today.getFullYear() + Math.floor(nextMonth / 12);
     const normalizedNextMonth = nextMonth % 12;
     const lastDayOfUpcomingMonth = new Date(nextYear, normalizedNextMonth + 1, 0).getDate();
-    const nextDate = new Date(nextYear, normalizedNextMonth, Math.min(day, lastDayOfUpcomingMonth));
+    let nextDate = new Date(nextYear, normalizedNextMonth, Math.min(day, lastDayOfUpcomingMonth));
+    const startDate = new Date(startYear, startMonth - 1, day);
+
+    if (nextDate <= startDate) {
+      const monthAfterStart = startDate.getMonth() + 1;
+      const renewalYear = startDate.getFullYear() + Math.floor(monthAfterStart / 12);
+      const renewalMonth = monthAfterStart % 12;
+      const lastDayOfRenewalMonth = new Date(renewalYear, renewalMonth + 1, 0).getDate();
+      nextDate = new Date(renewalYear, renewalMonth, Math.min(day, lastDayOfRenewalMonth));
+    }
 
     const nextYearValue = nextDate.getFullYear();
     const nextMonthValue = String(nextDate.getMonth() + 1).padStart(2, '0');
